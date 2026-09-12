@@ -8,6 +8,7 @@ import consola from 'consola/browser'
 import { useTranslation } from 'react-i18next'
 import { PiCheck, PiCheckSquareOffset, PiCopy, PiFloppyDisk } from 'react-icons/pi'
 import {
+    TbBolt,
     TbClipboardCopy,
     TbClipboardText,
     TbCut,
@@ -23,6 +24,7 @@ import { useIsMobile } from '@shared/hooks'
 import { useDownloadTemplate } from '@shared/ui/load-templates/use-download-template'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
+import { openProtocolPresetsModal } from '../protocol-presets'
 import classes from './config-editor-actions.module.css'
 import { Props } from './interfaces'
 
@@ -181,6 +183,51 @@ export function ConfigEditorActionsFeature(props: Props) {
         editorRef.current.getAction('editor.action.formatDocument')?.run()
     }
 
+    const openProtocolPresets = () => {
+        if (!editorRef.current) return
+
+        let currentConfig: unknown
+        try {
+            currentConfig = JSON.parse(editorRef.current.getValue())
+        } catch {
+            notifications.show({
+                color: 'red',
+                title: t('common.message.error'),
+                message: t('protocol-presets.invalid-current-config')
+            })
+            return
+        }
+
+        if (!currentConfig || typeof currentConfig !== 'object' || Array.isArray(currentConfig)) {
+            notifications.show({
+                color: 'red',
+                title: t('common.message.error'),
+                message: t('protocol-presets.invalid-current-config')
+            })
+            return
+        }
+
+        openProtocolPresetsModal({
+            currentConfig: currentConfig as Record<string, unknown>,
+            onConfirm: (nextConfig, addedCount) => {
+                if (!editorRef.current) return
+
+                const nextValue = JSON.stringify(nextConfig, null, 2)
+                editorRef.current.setValue(nextValue)
+                setHasUnsavedChanges(nextValue !== props.originalValue)
+
+                notifications.show({
+                    color: 'teal',
+                    title: t('protocol-presets.generation-successful'),
+                    message:
+                        addedCount > 0
+                            ? t('protocol-presets.added-count', { count: addedCount })
+                            : t('protocol-presets.compatibility-updated')
+                })
+            }
+        })
+    }
+
     return (
         <Group grow={isMobile} preventGrowOverflow={false} wrap="wrap">
             <Button
@@ -192,6 +239,14 @@ export function ConfigEditorActionsFeature(props: Props) {
                 variant="soft"
             >
                 {t('common.action.save')}
+            </Button>
+
+            <Button
+                leftSection={<TbBolt size={16} />}
+                onClick={openProtocolPresets}
+                variant="light"
+            >
+                {t('protocol-presets.quick-add')}
             </Button>
 
             {!isConfigValid && !isUpdating && (

@@ -10,6 +10,7 @@ import {
     TbCreditCard,
     TbDeviceAnalytics,
     TbFlame,
+    TbGauge,
     TbFolder,
     TbHexagon,
     TbPackage,
@@ -55,6 +56,12 @@ export const useDesktopMenuSections = (): MenuItem[] => {
                         href: ROUTES.DASHBOARD.MANAGEMENT.USERS,
                         icon: PiUsers,
                         id: 'users'
+                    },
+                    {
+                        name: 'Speed limits',
+                        href: ROUTES.DASHBOARD.MANAGEMENT.SPEED_LIMITS,
+                        icon: TbGauge,
+                        id: 'speed-limits'
                     },
                     {
                         name: t('constants.internal-squads'),

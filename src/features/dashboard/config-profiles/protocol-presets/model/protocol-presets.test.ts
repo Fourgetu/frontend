@@ -1,0 +1,271 @@
+import { decodeURLSafe } from '@stablelib/base64'
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+    applyRealityCompatibilityToConfig,
+    appendProtocolPresets,
+    getRealityClientCompatibility,
+    getRecommendedPresetIds,
+    getUsedInboundPorts,
+    stripRealityServerOnlyFields,
+    stripRealityServerOnlyFieldsFromOutbound,
+    validateRealityMinClientVersion
+} from './protocol-presets.ts'
+
+const tls = {
+    domain: 'node.example.com',
+    certificateFile: '/var/lib/remnawave/configs/xray/ssl/fullchain.pem',
+    keyFile: '/var/lib/remnawave/configs/xray/ssl/privkey.key'
+}
+
+test('adds Reality Vision to a blank Config Profile', () => {
+    const result = appendProtocolPresets({}, ['vless-reality-vision'])
+
+    assert.equal(result.added.length, 1)
+    assert.deepEqual(result.config.inbounds, [result.added[0].inbound])
+    assert.equal(result.added[0].inbound.protocol, 'vless')
+})
+
+test('adds Reality Vision without changing existing config sections', () => {
+    const existingInbound = { tag: 'existing', port: 30_000, protocol: 'vless', custom: true }
+    const source = {
+        inbounds: [existingInbound],
+        outbounds: [{ protocol: 'freedom', tag: 'DIRECT' }],
+        customRootField: { preserved: true }
+    }
+
+    const result = appendProtocolPresets(source, ['vless-reality-vision'])
+    const inbound = result.added[0].inbound
+    const reality = inbound.streamSettings.realitySettings as Record<string, unknown>
+
+    assert.equal((result.config.inbounds as unknown[])[0], existingInbound)
+    assert.deepEqual(result.config.outbounds, source.outbounds)
+    assert.deepEqual(result.config.customRootField, source.customRootField)
+    assert.equal(inbound.protocol, 'vless')
+    assert.equal(inbound.settings.flow, 'xtls-rprx-vision')
+    assert.equal(inbound.streamSettings.network, 'raw')
+    assert.equal(inbound.streamSettings.security, 'reality')
+    assert.match(reality.privateKey as string, /^[A-Za-z0-9_-]{43}$/)
+    assert.equal(decodeURLSafe(`${reality.privateKey}=`).length, 32)
+    assert.match(result.added[0].realityPublicKey!, /^[A-Za-z0-9_-]{43}$/)
+    assert.equal(decodeURLSafe(`${result.added[0].realityPublicKey}=`).length, 32)
+    assert.match((reality.shortIds as string[])[0], /^[a-f0-9]{16}$/)
+})
+
+test('adds every supported recommendation with unique ports and tags', () => {
+    const source = {
+        inbounds: [
+            { tag: 'vless-reality-vision-fixed', port: 20_000 },
+            { tag: 'range', port: '25000-25010,26000' }
+        ]
+    }
+    const result = appendProtocolPresets(source, getRecommendedPresetIds(), { tls })
+    const ports = result.added.map(({ inbound }) => inbound.port)
+    const tags = result.added.map(({ inbound }) => inbound.tag)
+
+    assert.equal(result.added.length, 4)
+    assert.equal(new Set(ports).size, ports.length)
+    assert.equal(new Set(tags).size, tags.length)
+    assert.ok(ports.every((port) => port >= 20_000 && port <= 60_000))
+    assert.ok(ports.every((port) => !getUsedInboundPorts(source.inbounds).has(port)))
+})
+
+test('consecutive additions cannot collide with earlier generated inbounds', () => {
+    const first = appendProtocolPresets({}, getRecommendedPresetIds(), { tls })
+    const second = appendProtocolPresets(first.config, getRecommendedPresetIds(), { tls })
+    const all = second.config.inbounds as Array<{ port: number; tag: string }>
+
+    assert.equal(new Set(all.map(({ port }) => port)).size, all.length)
+    assert.equal(new Set(all.map(({ tag }) => tag)).size, all.length)
+})
+
+test('Reality gRPC has no Vision flow and receives a valid service name', () => {
+    const result = appendProtocolPresets({}, ['vless-reality-grpc'])
+    const inbound = result.added[0].inbound
+    const grpc = inbound.streamSettings.grpcSettings as Record<string, unknown>
+
+    assert.equal(inbound.settings.flow, '')
+    assert.equal(inbound.streamSettings.network, 'grpc')
+    assert.match(grpc.serviceName as string, /^grpc-[a-z0-9]{12}$/)
+})
+
+test('TLS presets require complete TLS input and Hysteria2 uses h3', () => {
+    assert.throws(() => appendProtocolPresets({}, ['trojan-tcp-tls']))
+
+    const result = appendProtocolPresets({}, ['trojan-tcp-tls', 'hysteria2'], { tls })
+    const trojan = result.added[0].inbound
+    const hysteria = result.added[1].inbound
+    const hysteriaTls = hysteria.streamSettings.tlsSettings as Record<string, unknown>
+
+    assert.equal(trojan.protocol, 'trojan')
+    assert.deepEqual(trojan.settings.clients, [])
+    assert.equal(hysteria.protocol, 'hysteria')
+    assert.equal(hysteria.streamSettings.network, 'hysteria')
+    assert.deepEqual(hysteriaTls.alpn, ['h3'])
+    assert.equal((hysteria.streamSettings.hysteriaSettings as { version: number }).version, 2)
+})
+
+test('VMess is visible as a compatibility item but cannot create a broken config', () => {
+    assert.throws(
+        () => appendProtocolPresets({}, ['vmess-ws-tls'], { tls }),
+        /not supported|not managed/i
+    )
+})
+
+test('Reality Vision defaults to the shared 1.8.1 compatibility version', () => {
+    const reality = appendProtocolPresets({}, ['vless-reality-vision']).added[0].inbound
+        .streamSettings.realitySettings as Record<string, unknown>
+
+    assert.equal(reality.minClientVer, '1.8.1')
+})
+
+test('Reality gRPC defaults to the same 1.8.1 compatibility version', () => {
+    const reality = appendProtocolPresets({}, ['vless-reality-grpc']).added[0].inbound
+        .streamSettings.realitySettings as Record<string, unknown>
+
+    assert.equal(reality.minClientVer, '1.8.1')
+})
+
+test('non-Reality presets do not receive minClientVer', () => {
+    const result = appendProtocolPresets({}, ['trojan-tcp-tls', 'hysteria2'], { tls })
+
+    for (const item of result.added) {
+        const streamSettings = item.inbound.streamSettings as Record<string, unknown>
+        assert.equal(streamSettings.security, 'tls')
+        assert.equal('minClientVer' in streamSettings, false)
+        assert.equal('minClientVer' in (streamSettings.tlsSettings as object), false)
+    }
+})
+
+test('TLS-only VLESS stream settings do not receive Reality minClientVer', () => {
+    const tlsStream = stripRealityServerOnlyFields({
+        network: 'raw',
+        security: 'tls',
+        tlsSettings: { serverName: 'node.example.com' }
+    })
+
+    assert.equal('minClientVer' in tlsStream, false)
+    assert.equal('minClientVer' in (tlsStream.tlsSettings as object), false)
+})
+
+test('Reality compatibility presets and custom version are preserved', () => {
+    for (const minClientVer of ['1.8.2', '26.3.27', '0.0.0']) {
+        const reality = appendProtocolPresets({}, ['vless-reality-vision'], {
+            reality: {
+                minClientVer,
+                serverName: 'www.example.com',
+                target: 'www.example.com:443'
+            }
+        }).added[0].inbound.streamSettings.realitySettings as Record<string, unknown>
+        assert.equal(reality.minClientVer, minClientVer)
+    }
+})
+
+test('invalid Reality minClientVer values are rejected', () => {
+    for (const value of ['abc', '1.8', '1', '', '-1.8.1']) {
+        assert.equal(validateRealityMinClientVersion(value), false)
+        assert.throws(() =>
+            appendProtocolPresets({}, ['vless-reality-vision'], {
+                reality: {
+                    minClientVer: value,
+                    serverName: 'www.example.com',
+                    target: 'www.example.com:443'
+                }
+            })
+        )
+    }
+})
+
+test('compatibility helper compares semantic versions numerically', () => {
+    assert.deepEqual(getRealityClientCompatibility('1.8.1'), {
+        mihomo: true,
+        singbox: true,
+        xray: true
+    })
+    assert.deepEqual(getRealityClientCompatibility('1.8.2'), {
+        mihomo: true,
+        singbox: false,
+        xray: true
+    })
+    assert.deepEqual(getRealityClientCompatibility('26.3.27'), {
+        mihomo: false,
+        singbox: false,
+        xray: true
+    })
+    assert.deepEqual(getRealityClientCompatibility('0.0.0'), {
+        mihomo: true,
+        singbox: true,
+        xray: true
+    })
+})
+
+test('existing Reality config is changed only by an explicit compatibility update', () => {
+    const source = {
+        inbounds: [
+            {
+                tag: 'existing-reality',
+                streamSettings: {
+                    network: 'raw',
+                    security: 'reality',
+                    realitySettings: { serverNames: ['www.example.com'] }
+                }
+            },
+            {
+                tag: 'existing-tls',
+                streamSettings: { network: 'raw', security: 'tls' }
+            }
+        ],
+        customField: { keep: true }
+    }
+    const unchanged = applyRealityCompatibilityToConfig(source, '1.8.1', new Set(['other']))
+    assert.equal(
+        (
+            (unchanged.inbounds as Array<Record<string, unknown>>)[0].streamSettings as Record<
+                string,
+                unknown
+            >
+        ).realitySettings &&
+            'minClientVer' in
+                ((
+                    (unchanged.inbounds as Array<Record<string, unknown>>)[0]
+                        .streamSettings as Record<string, unknown>
+                ).realitySettings as object),
+        false
+    )
+    const updated = applyRealityCompatibilityToConfig(
+        source,
+        '1.8.1',
+        new Set(['existing-reality'])
+    )
+    assert.equal(
+        (
+            (
+                (updated.inbounds as Array<Record<string, unknown>>)[0].streamSettings as Record<
+                    string,
+                    unknown
+                >
+            ).realitySettings as Record<string, unknown>
+        ).minClientVer,
+        '1.8.1'
+    )
+    assert.deepEqual(updated.customField, source.customField)
+})
+
+test('REALITY server-only minClientVer is stripped from client outbound settings', () => {
+    const outbound = stripRealityServerOnlyFieldsFromOutbound({
+        protocol: 'vless',
+        streamSettings: {
+            security: 'reality',
+            realitySettings: {
+                publicKey: 'public',
+                shortId: 'short',
+                minClientVer: '1.8.1'
+            }
+        }
+    })
+    const realitySettings = (outbound.streamSettings as Record<string, unknown>)
+        .realitySettings as Record<string, unknown>
+    assert.equal('minClientVer' in realitySettings, false)
+    assert.equal(realitySettings.publicKey, 'public')
+})

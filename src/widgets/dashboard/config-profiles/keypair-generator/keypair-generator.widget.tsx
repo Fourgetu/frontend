@@ -6,8 +6,11 @@ import { TbKey, TbLock, TbSignature } from 'react-icons/tb'
 
 import { CopyableAreaShared } from '@shared/ui/copyable-area/copyable-area'
 import { CopyableFieldShared } from '@shared/ui/copyable-field/copyable-field'
-
-import { generateMlDsa65, generateMlKem768, generateX25519 } from './keypair-utils'
+import {
+    generateMlDsa65,
+    generateMlKem768,
+    generateX25519
+} from '@shared/utils/crypto/keypair-utils'
 
 const enum TabTypes {
     ML_DSA65 = 'ml-dsa65',

@@ -108,7 +108,16 @@ export const NodeCardWidget = memo((props: IProps) => {
     const percentage = calcPercentage()
     const fallbackProgress = node.isTrafficTrackingActive && node.trafficLimitBytes === 0
 
-    const isOnline = node.isConnected && node.xrayUptime !== 0 && !node.isDisabled
+    const isOnline =
+        node.isConnected &&
+        !node.isDisabled &&
+        (node.runtimeHealth
+            ? [
+                  node.runtimeHealth.xray.status,
+                  node.runtimeHealth.singbox.status,
+                  node.runtimeHealth.gost.status
+              ].includes('running')
+            : node.xrayUptime !== 0)
     const isConfigMissing =
         node.configProfile.activeConfigProfileUuid === null ||
         node.configProfile.activeInbounds.length === 0

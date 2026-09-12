@@ -18,6 +18,7 @@ import { QuickOpenPage } from '@pages/dashboard/quick-open'
 import { RemnawaveSettingsConnector } from '@pages/dashboard/remnawave-settings/connectors'
 import { ResponseRulesPageConnector } from '@pages/dashboard/response-rules/connectors/response-rules.page.connector'
 import { SessionsExplorerPageConnector } from '@pages/dashboard/sessions-explorer/ui/connectors/sessions-explorer.page.connector'
+import { SpeedLimitsPage } from '@pages/dashboard/speed-limits/speed-limits.page'
 import { SrhInspectorPageConnector } from '@pages/dashboard/srh-inspector/ui/connectors'
 import { StatisticNodesConnector } from '@pages/dashboard/statistic-nodes/connectors'
 import { SubpageConfigBasePageConnector } from '@pages/dashboard/subpage-config/ui/connectors/subpage-config-base-page.connector'
@@ -74,6 +75,10 @@ const router = createBrowserRouter(
                         <Route
                             element={<HostsPageConnector />}
                             path={ROUTES.DASHBOARD.MANAGEMENT.HOSTS}
+                        />
+                        <Route
+                            element={<SpeedLimitsPage />}
+                            path={ROUTES.DASHBOARD.MANAGEMENT.SPEED_LIMITS}
                         />
                         <Route
                             element={<NodesPageConnector />}

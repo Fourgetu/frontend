@@ -14,6 +14,7 @@ export const ROUTES = {
             ROOT: '/dashboard/management',
             USERS: '/dashboard/management/users',
             HOSTS: '/dashboard/management/hosts',
+            SPEED_LIMITS: '/dashboard/management/speed-limits',
             NODES: '/dashboard/management/nodes',
             NODES_STATS: '/dashboard/management/stats/nodes',
             NODES_METRICS: '/dashboard/management/metrics/nodes',

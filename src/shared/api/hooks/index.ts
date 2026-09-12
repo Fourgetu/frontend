@@ -62,3 +62,5 @@ export * from './system/system.query.hooks'
 
 export * from './users/users.mutation.hooks'
 export * from './users/users.query.hooks'
+export * from './speed-limits/speed-limits.hooks'
+export * from './user-routes/user-routes.hooks'

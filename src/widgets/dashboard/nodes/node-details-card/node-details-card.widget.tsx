@@ -14,6 +14,7 @@ import {
     Paper,
     Progress,
     SimpleGrid,
+    Stack,
     Text,
     ThemeIconProps,
     Tooltip
@@ -40,8 +41,28 @@ import { SectionCard } from '@shared/ui/section-card'
 import { prettifyBytesUtil } from '@shared/utils/bytes'
 import { getNodeResetDaysUtil, getXrayUptimeUtil } from '@shared/utils/time-utils'
 
+type RuntimeStatus = 'running' | 'stopped' | 'unavailable' | 'unknown'
+type RuntimeHealth = {
+    observedAt: string
+    xray: { status: RuntimeStatus; version: string | null }
+    singbox: { status: RuntimeStatus; version: string | null }
+    gost: {
+        status: RuntimeStatus
+        version: string | null
+        installed: boolean | null
+        services: number | null
+    }
+}
+
 interface IProps {
-    node: GetNodeCommand.Response['response']
+    node: GetNodeCommand.Response['response'] & { runtimeHealth?: RuntimeHealth | null }
+}
+
+const runtimeColor: Record<RuntimeStatus, string> = {
+    running: 'teal',
+    stopped: 'red',
+    unavailable: 'gray',
+    unknown: 'yellow'
 }
 
 export const NodeDetailsCardWidget = memo((props: IProps) => {
@@ -468,6 +489,45 @@ export const NodeDetailsCardWidget = memo((props: IProps) => {
                             </Paper>
                         )}
                     </SimpleGrid>
+                </SectionCard.Section>
+            )}
+            {node.runtimeHealth && (
+                <SectionCard.Section>
+                    <Stack gap="xs">
+                        <Group justify="space-between">
+                            <Text fw={600} size="sm">
+                                Runtime
+                            </Text>
+                            <Text c="dimmed" size="xs">
+                                {new Date(node.runtimeHealth.observedAt).toLocaleTimeString()}
+                            </Text>
+                        </Group>
+                        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="xs">
+                            {(
+                                [
+                                    ['Xray', node.runtimeHealth.xray],
+                                    ['sing-box', node.runtimeHealth.singbox],
+                                    ['GOST', node.runtimeHealth.gost]
+                                ] as const
+                            ).map(([name, runtime]) => (
+                                <Paper key={name} p="xs" radius="md" withBorder>
+                                    <Group justify="space-between" wrap="nowrap">
+                                        <Stack gap={0}>
+                                            <Text fw={600} size="xs">
+                                                {name}
+                                            </Text>
+                                            <Text c="dimmed" ff="monospace" size="xs">
+                                                {runtime.version ?? '—'}
+                                            </Text>
+                                        </Stack>
+                                        <Badge color={runtimeColor[runtime.status]} size="sm">
+                                            {runtime.status}
+                                        </Badge>
+                                    </Group>
+                                </Paper>
+                            ))}
+                        </SimpleGrid>
+                    </Stack>
                 </SectionCard.Section>
             )}
         </SectionCard.Root>

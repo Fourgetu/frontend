@@ -4,12 +4,26 @@ import {
     GetConfigProfileByUuidCommand,
     GetConfigProfilesCommand,
     GetConfigProfilesTagsCommand,
-    GetInboundsByProfileUuidCommand
+    GetInboundsByProfileUuidCommand,
+    ConfigProfileSchema
 } from '@remnawave/backend-contract'
+import { z } from 'zod'
 
 import { sToMs } from '@shared/utils/time-utils'
 
 import { createGetQueryHook, errorHandler } from '../../tsq-helpers'
+
+// Compatibility bridge for the locally extended backend contract. The
+// published package still strips coreType from otherwise valid responses.
+const concurrentConfigProfileSchema = ConfigProfileSchema.extend({
+    coreType: z.enum(['xray', 'singbox'])
+})
+const concurrentConfigProfilesResponseSchema = z.object({
+    response: z.object({ configProfiles: z.array(concurrentConfigProfileSchema) })
+})
+const concurrentConfigProfileResponseSchema = z.object({
+    response: concurrentConfigProfileSchema
+})
 
 export const configProfilesQueryKeys = createQueryKeys('configProfiles', {
     getConfigProfilesTags: {
@@ -31,7 +45,7 @@ export const configProfilesQueryKeys = createQueryKeys('configProfiles', {
 
 export const useGetConfigProfiles = createGetQueryHook({
     endpoint: GetConfigProfilesCommand.TSQ_url,
-    responseSchema: GetConfigProfilesCommand.ResponseSchema,
+    responseSchema: concurrentConfigProfilesResponseSchema,
     getQueryKey: () => configProfilesQueryKeys.getConfigProfiles.queryKey,
     rQueryParams: {
         refetchOnMount: true,
@@ -42,7 +56,7 @@ export const useGetConfigProfiles = createGetQueryHook({
 
 export const useGetConfigProfile = createGetQueryHook({
     endpoint: GetConfigProfileByUuidCommand.TSQ_url,
-    responseSchema: GetConfigProfileByUuidCommand.ResponseSchema,
+    responseSchema: concurrentConfigProfileResponseSchema,
     routeParamsSchema: GetConfigProfileByUuidCommand.RequestParamSchema,
     getQueryKey: ({ route }) => configProfilesQueryKeys.getConfigProfile(route!).queryKey,
     rQueryParams: {

@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react'
 
 import NiceModal from '@ebay/nice-modal-react'
+import { QuickDeployNodeModal } from '@features/dashboard/nodes/quick-deploy'
+import { RelayNodeModal } from '@features/dashboard/nodes/relay/modal-index'
 
 import { ConfigProfileInboundsDrawer, ActiveNodesModal } from './config-profiles'
 import { ExternalSquadsDrawer } from './external-squads'
@@ -102,6 +104,8 @@ export const MODAL_REGISTRY = {
     nodes_nodeInboundsHostsDrawer: NodeInboundsHostsDrawer,
     nodes_nodeGeocheckModal: NodeGeocheckModal,
     nodes_nodeSshTerminal: NodeSshTerminalWindow,
+    nodes_quickDeployNodeModal: QuickDeployNodeModal,
+    nodes_relayNodeModal: RelayNodeModal,
 
     internalSquads_internalSquadsInboundsDrawer: InternalSquadsInboundsDrawer,
     internalSquads_internalSquadAccessibleNodesDrawer: InternalSquadAccessibleNodesDrawer,

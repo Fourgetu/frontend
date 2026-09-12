@@ -13,6 +13,7 @@ import {
     RestartNodeCommand,
     UpdateNodeCommand
 } from '@remnawave/backend-contract'
+import { z } from 'zod'
 
 import { createMutationHook } from '../../tsq-helpers'
 
@@ -177,7 +178,9 @@ export const useReorderNodes = createMutationHook({
 export const useRestartNode = createMutationHook({
     endpoint: RestartNodeCommand.TSQ_url,
     routeParamsSchema: RestartNodeCommand.RequestParamSchema,
-    bodySchema: RestartNodeCommand.RequestBodySchema,
+    bodySchema: RestartNodeCommand.RequestBodySchema.extend({
+        runtime: z.enum(['all', 'xray', 'singbox', 'gost']).optional()
+    }),
     requestMethod: RestartNodeCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {

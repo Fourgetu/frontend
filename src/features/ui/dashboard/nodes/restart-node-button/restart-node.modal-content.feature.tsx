@@ -1,7 +1,7 @@
 import { Stack } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { useTranslation } from 'react-i18next'
-import { TbAlertCircle, TbRocket } from 'react-icons/tb'
+import { TbAlertCircle, TbArrowsExchange, TbRocket, TbRoute } from 'react-icons/tb'
 
 import { useRestartNode } from '@shared/api/hooks'
 import { ActionCardShared } from '@shared/ui/action-card'
@@ -44,6 +44,42 @@ export function RestartNodeModalContentFeature(props: IProps) {
                     })
                 }}
                 title={t('nodes-header-action-buttons.feature.force')}
+                variant="soft"
+            />
+
+            <ActionCardShared
+                description="Rebuild and reload only the active Xray profile. sing-box and GOST keep running."
+                icon={<TbArrowsExchange size={22} />}
+                iconColor="blue"
+                isLoading={isPending}
+                onClick={() => {
+                    restartNode({ variables: { forceRestart: true, runtime: 'xray' } })
+                }}
+                title="Reload Xray"
+                variant="soft"
+            />
+
+            <ActionCardShared
+                description="Rebuild and reload only the active sing-box profile. Xray and GOST keep running."
+                icon={<TbArrowsExchange size={22} />}
+                iconColor="violet"
+                isLoading={isPending}
+                onClick={() => {
+                    restartNode({ variables: { forceRestart: true, runtime: 'singbox' } })
+                }}
+                title="Reload sing-box"
+                variant="soft"
+            />
+
+            <ActionCardShared
+                description="Reconcile GOST forwards, limiter files and port-hopping ingress from Backend desired state."
+                icon={<TbRoute size={22} />}
+                iconColor="orange"
+                isLoading={isPending}
+                onClick={() => {
+                    restartNode({ variables: { forceRestart: false, runtime: 'gost' } })
+                }}
+                title="Sync GOST"
                 variant="soft"
             />
 

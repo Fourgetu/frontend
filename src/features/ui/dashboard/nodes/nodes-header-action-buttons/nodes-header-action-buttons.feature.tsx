@@ -9,6 +9,7 @@ import {
     TbPlus,
     TbPlugConnected,
     TbRefresh,
+    TbRoute,
     TbRocket,
     TbSearch,
     TbTable
@@ -180,6 +181,30 @@ export const NodesHeaderActionButtonsFeature = (props: IProps) => {
                         variant="soft"
                     >
                         <TbRefresh size="24px" />
+                    </ActionIcon>
+                </Tooltip>
+            </ActionIconGroup>
+            <ActionIconGroup>
+                <Tooltip label={t('quick-deploy.title')} withArrow>
+                    <ActionIcon
+                        color="teal"
+                        onClick={() => showModal('nodes_quickDeployNodeModal')}
+                        size="input-md"
+                        variant="soft"
+                    >
+                        <TbRocket size="24px" />
+                    </ActionIcon>
+                </Tooltip>
+            </ActionIconGroup>
+            <ActionIconGroup>
+                <Tooltip label={t('relay.title')} withArrow>
+                    <ActionIcon
+                        color="orange"
+                        onClick={() => showModal('nodes_relayNodeModal')}
+                        size="input-md"
+                        variant="soft"
+                    >
+                        <TbRoute size="24px" />
                     </ActionIcon>
                 </Tooltip>
             </ActionIconGroup>
