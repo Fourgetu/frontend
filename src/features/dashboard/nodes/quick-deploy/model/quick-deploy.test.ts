@@ -41,8 +41,9 @@ const PARAMETERS: QuickDeployParameters = {
     hostAddress: 'edge.example.com',
     reality: {
         minClientVer: '1.8.1',
-        serverName: 'www.cloudflare.com',
-        target: 'www.cloudflare.com:443'
+        serverName: 'swdist.apple.com',
+        targetDomain: 'swdist.apple.com',
+        targetPort: 443
     },
     tls: TLS,
     serverDescription: 'Primary edge'
@@ -299,6 +300,32 @@ test('maps Reality Vision Host fields from the generated Inbound', async () => {
     assert.equal(body.securityLayer, 'DEFAULT')
 })
 
+test('custom Reality values drive Preview, Profile, and Host for Vision and gRPC', async () => {
+    for (const presetId of ['vless-reality-vision', 'vless-reality-grpc'] as const) {
+        const api = new FakeQuickDeployApi()
+        const plan = planFor(api, { presetIds: [presetId] })
+        const plannedReality = (plan.inbounds[0].inbound as XrayInbound).streamSettings
+            .realitySettings as Record<string, unknown>
+
+        assert.equal(plannedReality.target, 'swdist.apple.com:443')
+        assert.deepEqual(plannedReality.serverNames, ['swdist.apple.com'])
+        assert.equal(plannedReality.minClientVer, '1.8.1')
+        assert.equal(plan.inbounds[0].domainOrServerName, 'swdist.apple.com')
+        assert.equal(plan.hosts[0].sni, 'swdist.apple.com')
+
+        await executeQuickDeployment(plan, api)
+
+        const savedReality = (api.profile.inbounds[0].rawInbound as XrayInbound).streamSettings
+            .realitySettings as Record<string, unknown>
+        assert.equal(savedReality.target, 'swdist.apple.com:443')
+        assert.deepEqual(savedReality.serverNames, ['swdist.apple.com'])
+        assert.equal(api.hostBodies[0].sni, 'swdist.apple.com')
+        const serialized = JSON.stringify({ plan, host: api.hostBodies[0] })
+        assert.equal(serialized.includes('www.intel.com'), false)
+        assert.equal(serialized.includes('www.microsoft.com'), false)
+    }
+})
+
 test('Reality gRPC has no Vision flow and maps serviceName to Host path', async () => {
     const api = new FakeQuickDeployApi()
 
@@ -352,8 +379,9 @@ test('reusing an existing Reality Inbound does not change its minClientVer', asy
     const existing = appendProtocolPresets({}, ['vless-reality-vision'], {
         reality: {
             minClientVer: '26.3.27',
-            serverName: 'www.example.com',
-            target: 'www.example.com:443'
+            serverName: 'www.microsoft.com',
+            targetDomain: 'www.microsoft.com',
+            targetPort: 443
         }
     }).added[0].inbound
     const api = new FakeQuickDeployApi([existing])
@@ -365,6 +393,13 @@ test('reusing an existing Reality Inbound does not change its minClientVer', asy
         (raw.streamSettings.realitySettings as Record<string, unknown>).minClientVer,
         '26.3.27'
     )
+    assert.equal(
+        (raw.streamSettings.realitySettings as Record<string, unknown>).target,
+        'www.microsoft.com:443'
+    )
+    assert.deepEqual((raw.streamSettings.realitySettings as Record<string, unknown>).serverNames, [
+        'www.microsoft.com'
+    ])
     assert.equal(api.calls.updateProfile, 0)
 })
 
@@ -372,7 +407,8 @@ test('explicit compatibility update changes only the selected existing Reality I
     const existing = appendProtocolPresets({}, ['vless-reality-vision'], {
         reality: {
             serverName: 'www.example.com',
-            target: 'www.example.com:443'
+            targetDomain: 'www.example.com',
+            targetPort: 443
         }
     }).added[0].inbound
     const api = new FakeQuickDeployApi([existing])

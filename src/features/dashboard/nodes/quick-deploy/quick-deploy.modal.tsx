@@ -1,5 +1,7 @@
 import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import {
+    DEFAULT_REALITY_TARGET_DOMAIN,
+    DEFAULT_REALITY_TARGET_PORT,
     getRealityClientCompatibility,
     getRealityMinClientVersion,
     REALITY_CLIENT_COMPATIBILITY,
@@ -71,8 +73,9 @@ const DEFAULT_PARAMETERS: QuickDeployParameters = {
     hostAddress: '',
     reality: {
         minClientVer: REALITY_MIN_CLIENT_VERSION_COMPAT,
-        serverName: 'www.microsoft.com',
-        target: 'www.microsoft.com:443'
+        serverName: DEFAULT_REALITY_TARGET_DOMAIN,
+        targetDomain: DEFAULT_REALITY_TARGET_DOMAIN,
+        targetPort: DEFAULT_REALITY_TARGET_PORT
     },
     tls: {
         domain: '',
@@ -197,6 +200,18 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
         key: Key,
         value: QuickDeployParameters[Key]
     ) => setParameters((current) => ({ ...current, [key]: value }))
+
+    const setRealityTargetDomain = (targetDomain: string) =>
+        setParameters((current) => ({
+            ...current,
+            reality: {
+                ...current.reality,
+                targetDomain,
+                ...(current.reality.serverName === current.reality.targetDomain
+                    ? { serverName: targetDomain }
+                    : {})
+            }
+        }))
 
     const selectNode = (nodeUuid: null | string) => {
         if (!nodeUuid || !nodes) return
@@ -562,6 +577,26 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                             {t('quick-deploy.reality-settings')}
                                         </Text>
                                         <TextInput
+                                            label={t('quick-deploy.reality-target-domain')}
+                                            onChange={(event) =>
+                                                setRealityTargetDomain(event.currentTarget.value)
+                                            }
+                                            required
+                                            value={parameters.reality.targetDomain}
+                                        />
+                                        <TextInput
+                                            inputMode="numeric"
+                                            label={t('quick-deploy.reality-target-port')}
+                                            onChange={(event) =>
+                                                setParameter('reality', {
+                                                    ...parameters.reality,
+                                                    targetPort: event.currentTarget.value
+                                                })
+                                            }
+                                            required
+                                            value={parameters.reality.targetPort}
+                                        />
+                                        <TextInput
                                             label={t('quick-deploy.server-name')}
                                             onChange={(event) =>
                                                 setParameter('reality', {
@@ -571,17 +606,6 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                             }
                                             required
                                             value={parameters.reality.serverName}
-                                        />
-                                        <TextInput
-                                            label={t('quick-deploy.reality-target')}
-                                            onChange={(event) =>
-                                                setParameter('reality', {
-                                                    ...parameters.reality,
-                                                    target: event.currentTarget.value
-                                                })
-                                            }
-                                            required
-                                            value={parameters.reality.target}
                                         />
                                         <Select
                                             data={[

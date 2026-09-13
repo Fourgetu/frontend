@@ -88,7 +88,8 @@ export interface QuickDeployParameters {
     reality: {
         minClientVer?: string
         serverName: string
-        target: string
+        targetDomain: string
+        targetPort: number | string
     }
     updateExistingRealityCompatibility?: boolean
     serverDescription?: string
@@ -371,8 +372,7 @@ const toPlannedInbound = (
     preset: getQuickDeployCapability(presetId),
     inbound,
     existingInboundUuid,
-    realityPublicKey:
-        built && 'realityPublicKey' in built ? built.realityPublicKey : undefined,
+    realityPublicKey: built && 'realityPublicKey' in built ? built.realityPublicKey : undefined,
     willUpdateInbound,
     willCreateInbound: !existingInboundUuid,
     domainOrServerName: getDomainOrServerName(inbound)
@@ -448,13 +448,13 @@ export const createQuickDeploymentPlan = (
             missingPresetIds.filter((id) => id === 'xray-socks5'),
             { reservedTags, reservedPorts }
         )
-        return { config: quickDeployOnly.config, added: [...standard.added, ...quickDeployOnly.added] }
+        return {
+            config: quickDeployOnly.config,
+            added: [...standard.added, ...quickDeployOnly.added]
+        }
     })()
     const builtByPreset = new Map(
-        generated.added.map((item) => [
-            'preset' in item ? item.preset.id : item.presetId,
-            item
-        ])
+        generated.added.map((item) => ['preset' in item ? item.preset.id : item.presetId, item])
     )
 
     const inbounds = parameters.presetIds.map((presetId) => {
@@ -489,13 +489,14 @@ export const createQuickDeploymentPlan = (
     const compatibilityUpdateTags = new Set(
         inbounds.filter((item) => item.willUpdateInbound).map((item) => item.inbound.tag)
     )
-    const plannedConfig = parameters.coreType === 'xray' && compatibilityUpdateTags.size
-        ? applyRealityCompatibilityToConfig(
-              generated.config,
-              normalizeRealityMinClientVersion(parameters.reality.minClientVer),
-              compatibilityUpdateTags
-          )
-        : generated.config
+    const plannedConfig =
+        parameters.coreType === 'xray' && compatibilityUpdateTags.size
+            ? applyRealityCompatibilityToConfig(
+                  generated.config,
+                  normalizeRealityMinClientVersion(parameters.reality.minClientVer),
+                  compatibilityUpdateTags
+              )
+            : generated.config
 
     const normalizedAddress = parameters.hostAddress.trim()
     const plannedHosts = inbounds.map((item): PlannedHost => {
@@ -702,7 +703,9 @@ export const executeQuickDeployment = async (
             result.nodeApply = skippedStep('Deployment did not reach Node apply.')
             return result
         }
-    } else if (freshPlan.inbounds.some((item) => item.willCreateInbound || item.willUpdateInbound)) {
+    } else if (
+        freshPlan.inbounds.some((item) => item.willCreateInbound || item.willUpdateInbound)
+    ) {
         try {
             deployedProfile = await api.updateProfile({
                 uuid: latestProfile.uuid,

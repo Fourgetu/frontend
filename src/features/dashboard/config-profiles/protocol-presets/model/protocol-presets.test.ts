@@ -90,6 +90,57 @@ test('Reality gRPC has no Vision flow and receives a valid service name', () => 
     assert.match(grpc.serviceName as string, /^grpc-[a-z0-9]{12}$/)
 })
 
+test('new Reality Vision and gRPC presets share the explicit Intel default', () => {
+    for (const presetId of ['vless-reality-vision', 'vless-reality-grpc'] as const) {
+        const result = appendProtocolPresets({}, [presetId])
+        const reality = result.added[0].inbound.streamSettings.realitySettings as Record<
+            string,
+            unknown
+        >
+
+        assert.equal(reality.target, 'www.intel.com:443')
+        assert.deepEqual(reality.serverNames, ['www.intel.com'])
+        assert.equal(reality.minClientVer, '1.8.1')
+        assert.equal(JSON.stringify(result.config).includes('www.microsoft.com'), false)
+    }
+})
+
+test('custom Reality Target and SNI override defaults for Vision and gRPC', () => {
+    for (const presetId of ['vless-reality-vision', 'vless-reality-grpc'] as const) {
+        const result = appendProtocolPresets({}, [presetId], {
+            reality: {
+                targetDomain: 'swdist.apple.com',
+                targetPort: 443,
+                serverName: 'swdist.apple.com'
+            }
+        })
+        const reality = result.added[0].inbound.streamSettings.realitySettings as Record<
+            string,
+            unknown
+        >
+
+        assert.equal(reality.target, 'swdist.apple.com:443')
+        assert.deepEqual(reality.serverNames, ['swdist.apple.com'])
+        assert.equal(reality.minClientVer, '1.8.1')
+        const serialized = JSON.stringify(result.config)
+        assert.equal(serialized.includes('www.intel.com'), false)
+        assert.equal(serialized.includes('www.microsoft.com'), false)
+    }
+})
+
+test('Reality Target and Server Name remain independently configurable', () => {
+    const reality = appendProtocolPresets({}, ['vless-reality-vision'], {
+        reality: {
+            targetDomain: 'target.example.com',
+            targetPort: 8443,
+            serverName: 'sni.example.com'
+        }
+    }).added[0].inbound.streamSettings.realitySettings as Record<string, unknown>
+
+    assert.equal(reality.target, 'target.example.com:8443')
+    assert.deepEqual(reality.serverNames, ['sni.example.com'])
+})
+
 test('TLS presets require complete TLS input and Hysteria2 uses h3', () => {
     assert.throws(() => appendProtocolPresets({}, ['trojan-tcp-tls']))
 
@@ -155,7 +206,8 @@ test('Reality compatibility presets and custom version are preserved', () => {
             reality: {
                 minClientVer,
                 serverName: 'www.example.com',
-                target: 'www.example.com:443'
+                targetDomain: 'www.example.com',
+                targetPort: 443
             }
         }).added[0].inbound.streamSettings.realitySettings as Record<string, unknown>
         assert.equal(reality.minClientVer, minClientVer)
@@ -170,7 +222,8 @@ test('invalid Reality minClientVer values are rejected', () => {
                 reality: {
                     minClientVer: value,
                     serverName: 'www.example.com',
-                    target: 'www.example.com:443'
+                    targetDomain: 'www.example.com',
+                    targetPort: 443
                 }
             })
         )

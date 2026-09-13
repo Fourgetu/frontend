@@ -44,8 +44,17 @@ export interface TlsPresetOptions {
 
 export interface RealityPresetOptions {
     minClientVer?: string
+    serverName?: string
+    targetDomain?: string
+    targetPort?: number | string
+}
+
+export interface ResolvedRealityPresetOptions {
+    minClientVer: string
     serverName: string
     target: string
+    targetDomain: string
+    targetPort: number
 }
 
 export interface XrayInbound extends Record<string, unknown> {
@@ -77,13 +86,30 @@ export interface ProtocolPresetBuildOptions {
 const PORT_MIN = 20_000
 const PORT_MAX = 60_000
 
-const REALITY_TARGETS = [
-    { serverName: 'www.microsoft.com', target: 'www.microsoft.com:443' },
-    { serverName: 'addons.mozilla.org', target: 'addons.mozilla.org:443' },
-    { serverName: 'www.cloudflare.com', target: 'www.cloudflare.com:443' }
-] as const
-
 export const DEFAULT_REALITY_MIN_CLIENT_VERSION = REALITY_MIN_CLIENT_VERSION_COMPAT
+export const DEFAULT_REALITY_TARGET_DOMAIN = 'www.intel.com'
+export const DEFAULT_REALITY_TARGET_PORT = 443
+
+export const resolveRealityPresetOptions = (
+    reality?: RealityPresetOptions
+): ResolvedRealityPresetOptions => {
+    const targetDomain = reality?.targetDomain?.trim() || DEFAULT_REALITY_TARGET_DOMAIN
+    const targetPortValue =
+        typeof reality?.targetPort === 'string' ? reality.targetPort.trim() : reality?.targetPort
+    const targetPort =
+        targetPortValue === undefined || targetPortValue === ''
+            ? DEFAULT_REALITY_TARGET_PORT
+            : Number(targetPortValue)
+    const serverName = reality?.serverName?.trim() || targetDomain
+
+    return {
+        minClientVer: normalizeRealityMinClientVersion(reality?.minClientVer),
+        serverName,
+        target: `${targetDomain}:${targetPort}`,
+        targetDomain,
+        targetPort
+    }
+}
 
 export const PROTOCOL_PRESETS: readonly ProtocolPreset[] = [
     {
@@ -293,10 +319,7 @@ const buildRealityPreset = (
     usedTags: Set<string>,
     realityOptions?: RealityPresetOptions
 ): BuiltProtocolPreset => {
-    const target = REALITY_TARGETS[randomInteger(0, REALITY_TARGETS.length - 1)]
-    const serverName = realityOptions?.serverName.trim() || target.serverName
-    const targetAddress = realityOptions?.target.trim() || target.target
-    const minClientVer = normalizeRealityMinClientVersion(realityOptions?.minClientVer)
+    const reality = resolveRealityPresetOptions(realityOptions)
     const keypair = generateX25519()
     const vision = preset.id === 'vless-reality-vision'
     const transportSettings = vision
@@ -315,13 +338,13 @@ const buildRealityPreset = (
                 security: 'reality',
                 ...transportSettings,
                 realitySettings: {
-                    target: targetAddress,
+                    target: reality.target,
                     show: false,
                     xver: 0,
                     shortIds: [randomHex(16)],
                     privateKey: keypair.privateKey,
-                    serverNames: [serverName],
-                    minClientVer
+                    serverNames: [reality.serverName],
+                    minClientVer: reality.minClientVer
                 }
             },
             usedPorts,
@@ -436,16 +459,20 @@ export const validateTlsPresetOptions = (tls?: TlsPresetOptions): string[] => {
 }
 
 export const validateRealityPresetOptions = (reality?: RealityPresetOptions): string[] => {
-    if (!reality) return []
-
     const invalid: string[] = []
     const domainPattern = /^(?=.{1,253}$)(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z]{2,63}$/i
-    const targetPattern =
-        /^(?=.{1,259}$)(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z]{2,63}:\d{1,5}$/i
+    const resolved = resolveRealityPresetOptions(reality)
 
-    if (!domainPattern.test(reality.serverName.trim())) invalid.push('serverName')
-    if (!targetPattern.test(reality.target.trim())) invalid.push('target')
-    if (reality.minClientVer && !validateRealityMinClientVersion(reality.minClientVer.trim())) {
+    if (!domainPattern.test(resolved.targetDomain)) invalid.push('targetDomain')
+    if (
+        !Number.isInteger(resolved.targetPort) ||
+        resolved.targetPort < 1 ||
+        resolved.targetPort > 65_535
+    ) {
+        invalid.push('targetPort')
+    }
+    if (!domainPattern.test(resolved.serverName)) invalid.push('serverName')
+    if (reality?.minClientVer && !validateRealityMinClientVersion(reality.minClientVer.trim())) {
         invalid.push('minClientVer')
     }
 
