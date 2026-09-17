@@ -1,0 +1,52 @@
+name: Custom Release - Frontend
+
+on:
+  push:
+    tags:
+      - 'custom-*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run start:build
+
+      - name: Create frontend archive
+        run: zip -r remnawave-frontend.zip ./dist
+
+      - name: Create prerelease and upload archive
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
+          body: |
+            # Remnawave custom frontend
+
+            This is a prerelease of the Fourgetu Remnawave custom stack.
+
+            - Commit: `${{ github.sha }}`
+            - Build: `npm run start:build`
+            - Artifact: `remnawave-frontend.zip`
+          files: remnawave-frontend.zip
