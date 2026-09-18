@@ -31,20 +31,20 @@ jobs:
       - name: Create frontend archive
         run: zip -r remnawave-frontend.zip ./dist
 
-      - name: Create prerelease and upload archive
+      - name: Create release and upload archive
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          prerelease: true
-          make_latest: false
+          prerelease: false
+          make_latest: true
           generate_release_notes: false
           body: |
             # Remnawave custom frontend
 
-            This is a prerelease of the Fourgetu Remnawave custom stack.
+            This is the stable release of the Fourgetu Remnawave custom stack.
 
             - Commit: `${{ github.sha }}`
             - Build: `npm run start:build`
