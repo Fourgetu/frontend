@@ -7,12 +7,14 @@ import {
     UpdateConfigProfileCommand
 } from '@remnawave/backend-contract'
 
+import { ConfigProfileResponseWithOptionalCoreTypeSchema } from '@shared/api/types/config-profile.schema'
+
 import { createMutationHook } from '../../tsq-helpers'
 
 export const useUpdateConfigProfile = createMutationHook({
     endpoint: UpdateConfigProfileCommand.TSQ_url,
     bodySchema: UpdateConfigProfileCommand.RequestBodySchema,
-    responseSchema: UpdateConfigProfileCommand.ResponseSchema,
+    responseSchema: ConfigProfileResponseWithOptionalCoreTypeSchema,
     requestMethod: UpdateConfigProfileCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {

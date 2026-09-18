@@ -1,10 +1,13 @@
+import type { ConfigProfileCoreType } from '../../config-validation/core-validation.ts'
 import type { editor } from 'monaco-editor'
 
-import { GetConfigProfilesCommand } from '@remnawave/backend-contract'
 import { RefObject } from 'react'
 
+import type { ConfigProfileWithCoreType } from '@shared/api/types'
+
 export interface Props {
-    configProfile: GetConfigProfilesCommand.Response['response']['configProfiles'][number]
+    configProfile: ConfigProfileWithCoreType
+    coreType: ConfigProfileCoreType
     editorRef: RefObject<editor.IStandaloneCodeEditor | null>
     hasUnsavedChanges: boolean
     isConfigValid: boolean

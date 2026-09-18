@@ -3,7 +3,10 @@ import type { editor } from 'monaco-editor'
 import { GetSnippetsCommand } from '@remnawave/backend-contract'
 import consola from 'consola/browser'
 import dayjs from 'dayjs'
+import { getWorker } from 'monaco-editor/languages/features/json/register'
 import { RefObject } from 'react'
+
+import { type ConfigProfileCoreType, validateConfigForCore } from './core-validation.ts'
 
 const PROTECTED_ROOT_KEYS = new Set(['api', 'inbounds', 'metrics', 'snippets', 'stats'])
 
@@ -65,8 +68,45 @@ const replaceSnippetsInArray = (array: any[], snippetsMap: Map<string, unknown>)
     }
 }
 
+interface JsonSchemaDiagnostic {
+    message: string
+    range: {
+        start: {
+            line: number
+        }
+    }
+    severity?: number
+}
+
+interface JsonValidationWorker {
+    doValidation: (uri: string) => Promise<JsonSchemaDiagnostic[]>
+}
+
+const validateWithSingboxSchema = async (
+    editorInstance: editor.IStandaloneCodeEditor
+): Promise<string | undefined> => {
+    const model = editorInstance.getModel()
+    if (!model || model.uri.scheme !== 'singbox-config') {
+        return 'sing-box schema validation is unavailable for the current editor model.'
+    }
+
+    const workerAccessor = await getWorker()
+    const worker = (await workerAccessor(model.uri)) as unknown as JsonValidationWorker
+    const diagnostics = await worker.doValidation(model.uri.toString())
+    const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 1)
+
+    if (errors.length === 0) return undefined
+
+    return errors
+        .slice(0, 3)
+        .map((diagnostic) => `Line ${diagnostic.range.start.line + 1}: ${diagnostic.message}`)
+        .join(' | ')
+}
+
+const validationRuns = new WeakMap<editor.IStandaloneCodeEditor, number>()
+
 export const ConfigValidationFeature = {
-    validate: (
+    validate: async (
         editorRef: RefObject<editor.IStandaloneCodeEditor | null>,
 
         setResult: (message: string) => void,
@@ -74,12 +114,28 @@ export const ConfigValidationFeature = {
         snippetsMap: Map<
             string,
             GetSnippetsCommand.Response['response']['snippets'][number]['snippet']
-        >
+        >,
+        coreType: ConfigProfileCoreType | undefined
     ) => {
         try {
             if (!editorRef.current) return
 
-            const currentValue = editorRef.current.getValue()
+            const editorInstance = editorRef.current
+            const run = (validationRuns.get(editorInstance) ?? 0) + 1
+            validationRuns.set(editorInstance, run)
+
+            if (!coreType) {
+                const validation = await validateConfigForCore(undefined, '', {
+                    singboxSchema: () => undefined,
+                    xrayWasm: () => undefined
+                })
+                if (validationRuns.get(editorInstance) !== run) return
+                setResult(`${dayjs().format('HH:mm:ss')} | ${validation.message}`)
+                setIsConfigValid(false)
+                return
+            }
+
+            const currentValue = editorInstance.getValue()
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let clonedCurrentValue: any
@@ -105,12 +161,27 @@ export const ConfigValidationFeature = {
                 replaceSnippetsInArray(clonedCurrentValue.routing.balancers, snippetsMap)
             }
 
-            const validationResult = window.XrayParseConfig(JSON.stringify(clonedCurrentValue))
+            if (clonedCurrentValue.route?.rules) {
+                replaceSnippetsInArray(clonedCurrentValue.route.rules, snippetsMap)
+            }
 
-            setResult(
-                `${dayjs().format('HH:mm:ss')} | ${validationResult || 'Xray config is valid.'}`
+            if (clonedCurrentValue.route?.rule_set) {
+                replaceSnippetsInArray(clonedCurrentValue.route.rule_set, snippetsMap)
+            }
+
+            const validation = await validateConfigForCore(
+                coreType,
+                JSON.stringify(clonedCurrentValue),
+                {
+                    singboxSchema: () => validateWithSingboxSchema(editorInstance),
+                    xrayWasm: (config) => window.XrayParseConfig(config) || undefined
+                }
             )
-            setIsConfigValid(!validationResult)
+
+            if (validationRuns.get(editorInstance) !== run) return
+
+            setResult(`${dayjs().format('HH:mm:ss')} | ${validation.message}`)
+            setIsConfigValid(validation.isValid)
         } catch (err: unknown) {
             const message = (err as Error).message
             if (message?.includes('Go program has already exited')) {

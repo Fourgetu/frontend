@@ -26,6 +26,7 @@ import {
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { TbGauge, TbPlugConnected, TbRefresh, TbTrash } from 'react-icons/tb'
 
 import {
@@ -53,10 +54,11 @@ import {
 } from '@shared/api/hooks'
 import { LoadingScreen, Page, PageHeaderShared } from '@shared/ui'
 
-const formatRate = (value: number) =>
-    value === 0 ? 'Unlimited' : `${bytesPerSecondToMbps(value).toLocaleString()} Mbps`
+const formatRate = (value: number, unlimitedLabel: string) =>
+    value === 0 ? unlimitedLabel : `${bytesPerSecondToMbps(value).toLocaleString()} Mbps`
 
 function RuntimeBadge({ nodeUuid }: { nodeUuid: string }) {
+    const { t } = useTranslation()
     const { data, isFetching, refetch } = useGetUserRouteRuntime({
         route: { nodeUuid },
         rQueryParams: { enabled: true, refetchInterval: 15_000, staleTime: 5_000 }
@@ -64,7 +66,11 @@ function RuntimeBadge({ nodeUuid }: { nodeUuid: string }) {
 
     const color = data?.running && data.installed ? 'teal' : data ? 'red' : 'gray'
     const label =
-        isFetching && !data ? 'Checking' : data?.running ? 'Runtime confirmed' : 'Unavailable'
+        isFetching && !data
+            ? t('speed-limits.runtime.checking')
+            : data?.running
+              ? t('speed-limits.runtime.confirmed')
+              : t('speed-limits.runtime.unavailable')
 
     return (
         <Group gap={4} wrap="nowrap">
@@ -73,7 +79,7 @@ function RuntimeBadge({ nodeUuid }: { nodeUuid: string }) {
                     data?.portHopping.error ??
                     data?.error ??
                     data?.gostVersion ??
-                    'GOST health is not available'
+                    t('speed-limits.runtime.health-unavailable')
                 }
             >
                 <Badge color={color} variant="light">
@@ -81,7 +87,7 @@ function RuntimeBadge({ nodeUuid }: { nodeUuid: string }) {
                 </Badge>
             </Tooltip>
             <ActionIcon
-                aria-label="Refresh runtime status"
+                aria-label={t('speed-limits.runtime.refresh')}
                 onClick={() => void refetch()}
                 size="sm"
                 variant="subtle"
@@ -93,6 +99,7 @@ function RuntimeBadge({ nodeUuid }: { nodeUuid: string }) {
 }
 
 export function SpeedLimitsPage() {
+    const { t } = useTranslation()
     const { data: speedLimits, isLoading: speedsLoading } = useGetSpeedLimits()
     const { data: routes, isLoading: routesLoading } = useGetUserRoutes()
     const { data: hoppingConfigs, isLoading: hoppingLoading } = useGetPortHoppingConfigs()
@@ -196,13 +203,13 @@ export function SpeedLimitsPage() {
                 const raw = inbound.rawInbound as { type?: unknown } | null | undefined
                 if (raw?.type !== 'hysteria2') continue
                 options.set(inbound.uuid, {
-                    label: `${node.name} · ${inbound.tag} · :${inbound.port ?? 'dynamic'}`,
+                    label: `${node.name} · ${inbound.tag} · :${inbound.port ?? t('speed-limits.common.dynamic')}`,
                     value: inbound.uuid
                 })
             }
         }
         return [...options.values()]
-    }, [nodes, profiles])
+    }, [nodes, profiles, t])
     const hoppingInboundMap = useMemo(
         () => new Map(hoppingInboundOptions.map((option) => [option.value, option.label])),
         [hoppingInboundOptions]
@@ -211,7 +218,12 @@ export function SpeedLimitsPage() {
         hoppingConfigs
             ?.filter((config) => config.enabled && config.configProfileInboundUuid === inboundUuid)
             .map((config) => ({
-                label: `${config.poolStart}–${config.poolEnd} · ${config.portsPerUser} ports/user · ${config.hopIntervalSeconds}s`,
+                label: t('speed-limits.hopping.route-option', {
+                    start: config.poolStart,
+                    end: config.poolEnd,
+                    ports: config.portsPerUser,
+                    seconds: config.hopIntervalSeconds
+                }),
                 value: config.uuid
             })) ?? []
 
@@ -267,8 +279,8 @@ export function SpeedLimitsPage() {
         if (poolStart >= poolEnd || poolEnd - poolStart + 1 < portsPerUser) {
             notifications.show({
                 color: 'red',
-                title: 'Invalid port pool',
-                message: 'The pool must contain at least one complete per-user allocation.'
+                title: t('speed-limits.notifications.invalid-pool-title'),
+                message: t('speed-limits.notifications.invalid-pool-message')
             })
             return
         }
@@ -312,8 +324,8 @@ export function SpeedLimitsPage() {
         if (!inboundIsLoopback || !safetyConfirmed) {
             notifications.show({
                 color: 'red',
-                title: 'Loopback required',
-                message: 'The selected Xray inbound must explicitly listen on 127.0.0.1 or ::1.'
+                title: t('speed-limits.notifications.loopback-required-title'),
+                message: t('speed-limits.notifications.loopback-required-message')
             })
             return
         }
@@ -344,35 +356,32 @@ export function SpeedLimitsPage() {
     if (speedsLoading || routesLoading || hoppingLoading) return <LoadingScreen />
 
     return (
-        <Page title="User route speed limits">
+        <Page title={t('speed-limits.title')}>
             <PageHeaderShared
-                actions={<Button onClick={() => openSpeedModal()}>New speed policy</Button>}
+                actions={
+                    <Button onClick={() => openSpeedModal()}>
+                        {t('speed-limits.policies.new')}
+                    </Button>
+                }
                 icon={<TbGauge size={24} />}
-                title="User route speed limits"
+                title={t('speed-limits.title')}
             />
 
-            <Alert color="orange" mb="lg" title="Explicit GOST limiter mode only">
-                Existing public proxy-core inbounds are never migrated automatically. A route can be
-                created only when the selected inbound already listens explicitly on loopback;
-                removing the route restores the subscription to the Host port.
+            <Alert color="orange" mb="lg" title={t('speed-limits.alerts.explicit-title')}>
+                {t('speed-limits.alerts.explicit-description')}
             </Alert>
 
-            <Alert color="yellow" mb="lg" title="Route-assigned limit, not identity-bound">
-                GOST selects the limiter bucket from the external destination port before Xray or
-                sing-box authenticates the protocol credential. A user who knows another route port
-                targeting the same inbound may select that route&apos;s bucket. Treat external route
-                ports as sensitive assignment data; this mode is not a cryptographic quota boundary
-                between mutually hostile users.
+            <Alert color="yellow" mb="lg" title={t('speed-limits.alerts.assignment-title')}>
+                {t('speed-limits.alerts.assignment-description')}
             </Alert>
 
             <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="lg">
                 <Card withBorder>
                     <Group justify="space-between" mb="md">
                         <div>
-                            <Text fw={600}>Speed policies</Text>
+                            <Text fw={600}>{t('speed-limits.policies.title')}</Text>
                             <Text c="dimmed" size="sm">
-                                Values are displayed in Mbps and stored as bytes/sec. Zero means
-                                unlimited.
+                                {t('speed-limits.policies.description')}
                             </Text>
                         </div>
                     </Group>
@@ -380,10 +389,10 @@ export function SpeedLimitsPage() {
                         <Table striped withTableBorder>
                             <Table.Thead>
                                 <Table.Tr>
-                                    <Table.Th>Name</Table.Th>
-                                    <Table.Th>Download</Table.Th>
-                                    <Table.Th>Upload</Table.Th>
-                                    <Table.Th>Status</Table.Th>
+                                    <Table.Th>{t('common.field.name')}</Table.Th>
+                                    <Table.Th>{t('speed-limits.fields.download')}</Table.Th>
+                                    <Table.Th>{t('speed-limits.fields.upload')}</Table.Th>
+                                    <Table.Th>{t('common.field.status')}</Table.Th>
                                     <Table.Th />
                                 </Table.Tr>
                             </Table.Thead>
@@ -395,14 +404,22 @@ export function SpeedLimitsPage() {
                                     >
                                         <Table.Td>{speed.name}</Table.Td>
                                         <Table.Td>
-                                            {formatRate(speed.downloadBytesPerSecond)}
+                                            {formatRate(
+                                                speed.downloadBytesPerSecond,
+                                                t('speed-limits.common.unlimited')
+                                            )}
                                         </Table.Td>
                                         <Table.Td>
-                                            {formatRate(speed.uploadBytesPerSecond)}
+                                            {formatRate(
+                                                speed.uploadBytesPerSecond,
+                                                t('speed-limits.common.unlimited')
+                                            )}
                                         </Table.Td>
                                         <Table.Td>
                                             <Badge color={speed.enabled ? 'teal' : 'gray'}>
-                                                {speed.enabled ? 'Enabled' : 'Unlimited fallback'}
+                                                {speed.enabled
+                                                    ? t('speed-limits.common.enabled')
+                                                    : t('speed-limits.policies.unlimited-fallback')}
                                             </Badge>
                                         </Table.Td>
                                         <Table.Td>
@@ -412,7 +429,7 @@ export function SpeedLimitsPage() {
                                                     size="xs"
                                                     variant="subtle"
                                                 >
-                                                    Edit
+                                                    {t('common.action.edit')}
                                                 </Button>
                                                 <ActionIcon
                                                     color="red"
@@ -437,24 +454,24 @@ export function SpeedLimitsPage() {
                 <Card withBorder>
                     <Group justify="space-between" mb="md">
                         <div>
-                            <Text fw={600}>Per-user routes</Text>
+                            <Text fw={600}>{t('speed-limits.routes.title')}</Text>
                             <Text c="dimmed" size="sm">
-                                Each row owns an independent external port and GOST limiter bucket.
+                                {t('speed-limits.routes.description')}
                             </Text>
                         </div>
                         <Button leftSection={<TbPlugConnected />} onClick={routeModal.open}>
-                            New route
+                            {t('speed-limits.routes.new')}
                         </Button>
                     </Group>
                     <Table.ScrollContainer minWidth={980}>
                         <Table striped withTableBorder>
                             <Table.Thead>
                                 <Table.Tr>
-                                    <Table.Th>User / Node</Table.Th>
-                                    <Table.Th>Ports</Table.Th>
-                                    <Table.Th>Policy</Table.Th>
-                                    <Table.Th>Runtime</Table.Th>
-                                    <Table.Th>Enabled</Table.Th>
+                                    <Table.Th>{t('speed-limits.routes.user-node')}</Table.Th>
+                                    <Table.Th>{t('speed-limits.fields.ports')}</Table.Th>
+                                    <Table.Th>{t('speed-limits.fields.policy')}</Table.Th>
+                                    <Table.Th>{t('speed-limits.fields.runtime')}</Table.Th>
+                                    <Table.Th>{t('speed-limits.common.enabled')}</Table.Th>
                                     <Table.Th />
                                 </Table.Tr>
                             </Table.Thead>
@@ -464,7 +481,9 @@ export function SpeedLimitsPage() {
                                         <Table.Td>
                                             <Text size="sm" fw={500}>
                                                 {userMap.get(route.userId) ??
-                                                    `User #${route.userId}`}
+                                                    t('speed-limits.routes.user-fallback', {
+                                                        id: route.userId
+                                                    })}
                                             </Text>
                                             <Text c="dimmed" size="xs">
                                                 {nodeMap.get(route.nodeUuid) ?? route.nodeUuid} ·{' '}
@@ -479,8 +498,10 @@ export function SpeedLimitsPage() {
                                             {route.hopStartPort !== null &&
                                                 route.hopEndPort !== null && (
                                                     <Text c="dimmed" size="xs">
-                                                        HY2 hopping: {route.hopStartPort}–
-                                                        {route.hopEndPort} UDP
+                                                        {t('speed-limits.routes.hy2-hopping', {
+                                                            start: route.hopStartPort,
+                                                            end: route.hopEndPort
+                                                        })}
                                                     </Text>
                                                 )}
                                         </Table.Td>
@@ -488,7 +509,10 @@ export function SpeedLimitsPage() {
                                             <Select
                                                 allowDeselect
                                                 data={[
-                                                    { label: 'Unlimited', value: '' },
+                                                    {
+                                                        label: t('speed-limits.common.unlimited'),
+                                                        value: ''
+                                                    },
                                                     ...(speedLimits?.map((speed) => ({
                                                         label: speed.name,
                                                         value: speed.uuid
@@ -524,7 +548,9 @@ export function SpeedLimitsPage() {
                                         </Table.Td>
                                         <Table.Td>
                                             <Group gap={2} justify="flex-end" wrap="nowrap">
-                                                <Tooltip label="Reallocate external port">
+                                                <Tooltip
+                                                    label={t('speed-limits.routes.reallocate-port')}
+                                                >
                                                     <ActionIcon
                                                         onClick={() =>
                                                             reallocatePort.mutate({
@@ -536,7 +562,11 @@ export function SpeedLimitsPage() {
                                                         <TbRefresh size={16} />
                                                     </ActionIcon>
                                                 </Tooltip>
-                                                <Tooltip label="Remove route and restore Host port">
+                                                <Tooltip
+                                                    label={t(
+                                                        'speed-limits.routes.remove-and-restore'
+                                                    )}
+                                                >
                                                     <ActionIcon
                                                         color="red"
                                                         onClick={() =>
@@ -562,26 +592,26 @@ export function SpeedLimitsPage() {
             <Card mt="lg" withBorder>
                 <Group justify="space-between" mb="md">
                     <div>
-                        <Text fw={600}>Hysteria2 port hopping</Text>
+                        <Text fw={600}>{t('speed-limits.hopping.title')}</Text>
                         <Text c="dimmed" size="sm">
-                            Stable per-user UDP ranges for active sing-box Hysteria2 inbounds.
+                            {t('speed-limits.hopping.description')}
                         </Text>
                     </div>
-                    <Button onClick={() => openHoppingModal()}>New hopping config</Button>
+                    <Button onClick={() => openHoppingModal()}>
+                        {t('speed-limits.hopping.new')}
+                    </Button>
                 </Group>
-                <Alert color="blue" mb="md" title="Node ingress requirement">
-                    Port hopping uses nftables before the canonical per-user GOST UDP service. The
-                    Node container requires NET_ADMIN; the canonical GOST port remains the fallback
-                    if hopping ingress is unavailable.
+                <Alert color="blue" mb="md" title={t('speed-limits.hopping.ingress-title')}>
+                    {t('speed-limits.hopping.ingress-description')}
                 </Alert>
                 <Table.ScrollContainer minWidth={760}>
                     <Table striped withTableBorder>
                         <Table.Thead>
                             <Table.Tr>
-                                <Table.Th>sing-box Hysteria2 inbound</Table.Th>
-                                <Table.Th>Pool</Table.Th>
-                                <Table.Th>Allocation</Table.Th>
-                                <Table.Th>Status</Table.Th>
+                                <Table.Th>{t('speed-limits.hopping.inbound')}</Table.Th>
+                                <Table.Th>{t('speed-limits.hopping.pool')}</Table.Th>
+                                <Table.Th>{t('speed-limits.hopping.allocation')}</Table.Th>
+                                <Table.Th>{t('common.field.status')}</Table.Th>
                                 <Table.Th />
                             </Table.Tr>
                         </Table.Thead>
@@ -596,12 +626,16 @@ export function SpeedLimitsPage() {
                                         {config.poolStart}–{config.poolEnd} UDP
                                     </Table.Td>
                                     <Table.Td>
-                                        {config.portsPerUser} ports/user ·{' '}
-                                        {config.hopIntervalSeconds}s
+                                        {t('speed-limits.hopping.allocation-value', {
+                                            ports: config.portsPerUser,
+                                            seconds: config.hopIntervalSeconds
+                                        })}
                                     </Table.Td>
                                     <Table.Td>
                                         <Badge color={config.enabled ? 'teal' : 'gray'}>
-                                            {config.enabled ? 'Enabled' : 'Disabled'}
+                                            {config.enabled
+                                                ? t('speed-limits.common.enabled')
+                                                : t('speed-limits.common.disabled')}
                                         </Badge>
                                     </Table.Td>
                                     <Table.Td>
@@ -611,9 +645,11 @@ export function SpeedLimitsPage() {
                                                 size="xs"
                                                 variant="subtle"
                                             >
-                                                Edit
+                                                {t('common.action.edit')}
                                             </Button>
-                                            <Tooltip label="Delete config and release its route ranges">
+                                            <Tooltip
+                                                label={t('speed-limits.hopping.delete-tooltip')}
+                                            >
                                                 <ActionIcon
                                                     color="red"
                                                     onClick={() =>
@@ -638,39 +674,43 @@ export function SpeedLimitsPage() {
             <Modal
                 onClose={speedModal.close}
                 opened={speedModalOpened}
-                title={editingSpeed ? 'Edit speed policy' : 'Create speed policy'}
+                title={
+                    editingSpeed
+                        ? t('speed-limits.policies.edit')
+                        : t('speed-limits.policies.create')
+                }
             >
                 <Stack>
                     <TextInput
-                        label="Name"
+                        label={t('common.field.name')}
                         onChange={(event) => setSpeedName(event.currentTarget.value)}
                         required
                         value={speedName}
                     />
                     <NumberInput
                         decimalScale={3}
-                        label="Download (Mbps)"
+                        label={t('speed-limits.fields.download-mbps')}
                         min={0}
                         onChange={(value) => setDownloadMbps(typeof value === 'number' ? value : 0)}
                         value={downloadMbps}
                     />
                     <NumberInput
                         decimalScale={3}
-                        label="Upload (Mbps)"
+                        label={t('speed-limits.fields.upload-mbps')}
                         min={0}
                         onChange={(value) => setUploadMbps(typeof value === 'number' ? value : 0)}
                         value={uploadMbps}
                     />
                     <Switch
                         checked={speedEnabled}
-                        label="Enabled (disabled policies behave as unlimited)"
+                        label={t('speed-limits.policies.enabled-description')}
                         onChange={(event) => setSpeedEnabled(event.currentTarget.checked)}
                     />
                     <Button
                         loading={createSpeed.isPending || updateSpeed.isPending}
                         onClick={saveSpeed}
                     >
-                        Save
+                        {t('common.action.save')}
                     </Button>
                 </Stack>
             </Modal>
@@ -679,7 +719,7 @@ export function SpeedLimitsPage() {
                 onClose={routeModal.close}
                 opened={routeModalOpened}
                 size="lg"
-                title="Create per-user GOST route"
+                title={t('speed-limits.routes.create')}
             >
                 <Stack>
                     <Select
@@ -689,7 +729,7 @@ export function SpeedLimitsPage() {
                                 value: String(user.id)
                             })) ?? []
                         }
-                        label="User"
+                        label={t('speed-limits.fields.user')}
                         onChange={setUserId}
                         required
                         searchable
@@ -697,7 +737,7 @@ export function SpeedLimitsPage() {
                     />
                     <Select
                         data={nodes?.map((node) => ({ label: node.name, value: node.uuid })) ?? []}
-                        label="Node"
+                        label={t('speed-limits.fields.node')}
                         onChange={(value) => {
                             setNodeUuid(value)
                             setInboundUuid(null)
@@ -710,7 +750,7 @@ export function SpeedLimitsPage() {
                     />
                     <Select
                         data={inboundOptions}
-                        label="Proxy-core inbound"
+                        label={t('speed-limits.fields.proxy-core-inbound')}
                         onChange={(value) => {
                             setInboundUuid(value)
                             setHostUuid(null)
@@ -722,15 +762,12 @@ export function SpeedLimitsPage() {
                         value={inboundUuid}
                     />
                     {selectedInbound && !inboundIsLoopback && (
-                        <Alert color="red">
-                            This inbound is public or has no explicit listen address. Edit its core
-                            config to listen on 127.0.0.1/::1 before creating a limited route.
-                        </Alert>
+                        <Alert color="red">{t('speed-limits.routes.public-inbound-warning')}</Alert>
                     )}
                     <Select
                         data={hostOptions}
                         disabled={!inboundUuid}
-                        label="Host"
+                        label={t('speed-limits.fields.host')}
                         onChange={setHostUuid}
                         required
                         searchable
@@ -744,9 +781,9 @@ export function SpeedLimitsPage() {
                                 value: speed.uuid
                             })) ?? []
                         }
-                        label="Speed policy"
+                        label={t('speed-limits.fields.speed-policy')}
                         onChange={setSpeedLimitUuid}
-                        placeholder="Unlimited"
+                        placeholder={t('speed-limits.common.unlimited')}
                         value={speedLimitUuid}
                     />
                     <Select
@@ -754,13 +791,13 @@ export function SpeedLimitsPage() {
                         data={routeHoppingOptions}
                         description={
                             routeHoppingOptions.length > 0
-                                ? 'Allocates a stable per-user UDP range; subscription formats without hopping support use the canonical external port.'
-                                : 'Available only for an active sing-box Hysteria2 inbound with an enabled hopping config.'
+                                ? t('speed-limits.routes.hopping-available-description')
+                                : t('speed-limits.routes.hopping-unavailable-description')
                         }
                         disabled={routeHoppingOptions.length === 0}
-                        label="Hysteria2 port hopping"
+                        label={t('speed-limits.hopping.title')}
                         onChange={setPortHoppingConfigUuid}
-                        placeholder="Canonical external port only"
+                        placeholder={t('speed-limits.routes.canonical-port-only')}
                         value={portHoppingConfigUuid}
                     />
                     <SimpleGrid cols={2}>
@@ -769,23 +806,23 @@ export function SpeedLimitsPage() {
                                 { label: 'TCP', value: 'tcp' },
                                 { label: 'UDP', value: 'udp' }
                             ]}
-                            description="Derived from the selected proxy-core inbound"
+                            description={t('speed-limits.routes.network-derived')}
                             disabled
-                            label="Forward network"
+                            label={t('speed-limits.fields.forward-network')}
                             value={network}
                         />
                         <NumberInput
-                            label="External port"
+                            label={t('speed-limits.fields.external-port')}
                             max={65535}
                             min={1}
                             onChange={setExternalPort}
-                            placeholder="Automatic (32000–32999)"
+                            placeholder={t('speed-limits.routes.automatic-port')}
                             value={externalPort}
                         />
                     </SimpleGrid>
                     <Checkbox
                         checked={safetyConfirmed}
-                        label="I confirm this inbound is intentionally in GOST limiter mode and direct public access to its proxy-core port is blocked."
+                        label={t('speed-limits.routes.safety-confirmation')}
                         onChange={(event) => setSafetyConfirmed(event.currentTarget.checked)}
                     />
                     <Button
@@ -793,7 +830,7 @@ export function SpeedLimitsPage() {
                         loading={createRoute.isPending}
                         onClick={saveRoute}
                     >
-                        Create and verify runtime
+                        {t('speed-limits.routes.create-and-verify')}
                     </Button>
                 </Stack>
             </Modal>
@@ -802,14 +839,18 @@ export function SpeedLimitsPage() {
                 onClose={hoppingModal.close}
                 opened={hoppingModalOpened}
                 size="lg"
-                title={editingHopping ? 'Edit port hopping config' : 'Create port hopping config'}
+                title={
+                    editingHopping
+                        ? t('speed-limits.hopping.edit')
+                        : t('speed-limits.hopping.create')
+                }
             >
                 <Stack>
                     <Select
                         data={hoppingInboundOptions}
-                        description="Only active sing-box Hysteria2 inbounds are eligible."
+                        description={t('speed-limits.hopping.eligible-description')}
                         disabled={editingHopping !== null}
-                        label="sing-box Hysteria2 inbound"
+                        label={t('speed-limits.hopping.inbound')}
                         onChange={setHoppingInboundUuid}
                         required
                         searchable
@@ -818,7 +859,7 @@ export function SpeedLimitsPage() {
                     <SimpleGrid cols={{ base: 1, sm: 2 }}>
                         <NumberInput
                             allowDecimal={false}
-                            label="Pool start"
+                            label={t('speed-limits.hopping.pool-start')}
                             max={65_535}
                             min={1}
                             onChange={setPoolStart}
@@ -826,7 +867,7 @@ export function SpeedLimitsPage() {
                         />
                         <NumberInput
                             allowDecimal={false}
-                            label="Pool end"
+                            label={t('speed-limits.hopping.pool-end')}
                             max={65_535}
                             min={1}
                             onChange={setPoolEnd}
@@ -834,8 +875,8 @@ export function SpeedLimitsPage() {
                         />
                         <NumberInput
                             allowDecimal={false}
-                            description="Each user receives one stable, non-overlapping range."
-                            label="Ports per user"
+                            description={t('speed-limits.hopping.ports-per-user-description')}
+                            label={t('speed-limits.hopping.ports-per-user')}
                             max={1_024}
                             min={2}
                             onChange={setPortsPerUser}
@@ -843,8 +884,8 @@ export function SpeedLimitsPage() {
                         />
                         <NumberInput
                             allowDecimal={false}
-                            description="Emitted as hop_interval / hop-interval in supported clients."
-                            label="Hop interval (seconds)"
+                            description={t('speed-limits.hopping.interval-description')}
+                            label={t('speed-limits.hopping.interval')}
                             max={86_400}
                             min={1}
                             onChange={setHopIntervalSeconds}
@@ -853,7 +894,7 @@ export function SpeedLimitsPage() {
                     </SimpleGrid>
                     <Switch
                         checked={hoppingEnabled}
-                        label="Enabled"
+                        label={t('speed-limits.common.enabled')}
                         onChange={(event) => setHoppingEnabled(event.currentTarget.checked)}
                     />
                     <Button
@@ -861,7 +902,7 @@ export function SpeedLimitsPage() {
                         loading={createHopping.isPending || updateHopping.isPending}
                         onClick={saveHopping}
                     >
-                        Save and validate allocations
+                        {t('speed-limits.hopping.save-and-validate')}
                     </Button>
                 </Stack>
             </Modal>

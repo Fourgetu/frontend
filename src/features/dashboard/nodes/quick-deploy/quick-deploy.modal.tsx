@@ -149,7 +149,7 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
     const profiles = profilesResponse?.configProfiles
     const selectedNode = nodes?.find((node) => node.uuid === parameters.nodeUuid)
     const availableProfiles = profiles?.filter(
-        (profile) => (profile.coreType ?? 'xray') === parameters.coreType
+        (profile) => profile.coreType === parameters.coreType
     )
     const selectedProfile = availableProfiles?.find(
         (profile) => profile.uuid === parameters.profileUuid
@@ -224,8 +224,7 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                 : node.configProfile.activeSingBoxConfigProfileUuid
         const nextProfileUuid =
             activeProfileUuid ??
-            profiles?.find((profile) => (profile.coreType ?? 'xray') === parameters.coreType)
-                ?.uuid ??
+            profiles?.find((profile) => profile.coreType === parameters.coreType)?.uuid ??
             AUTO_PROFILE_UUID
         setParameters((current) => ({
             ...current,
@@ -246,7 +245,7 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
             : null
         const nextProfileUuid =
             activeProfileUuid ??
-            profiles?.find((profile) => (profile.coreType ?? 'xray') === coreType)?.uuid ??
+            profiles?.find((profile) => profile.coreType === coreType)?.uuid ??
             AUTO_PROFILE_UUID
         setParameters((current) => ({
             ...current,

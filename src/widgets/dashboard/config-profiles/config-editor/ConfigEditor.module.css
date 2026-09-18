@@ -13,6 +13,26 @@
     z-index: 1;
 }
 
+.visualEditorWrapper {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    resize: none;
+}
+
+.visualOverview {
+    min-height: 0;
+    padding-bottom: calc(var(--mantine-spacing-xl) + 72px);
+}
+
+.visualFooter {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    box-shadow: 0 -6px 16px rgb(0 0 0 / 12%);
+}
+
 .statusCode {
     background-color: transparent;
     font-size: 0.9rem;

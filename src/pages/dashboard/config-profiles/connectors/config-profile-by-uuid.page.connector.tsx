@@ -1,5 +1,5 @@
 import { consola } from 'consola/browser'
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useParams } from 'react-router'
 import { app } from 'src/config'
 
@@ -14,10 +14,12 @@ export function ConfigProfileByUuidPageConnector() {
     const { uuid } = useParams()
 
     const [downloadProgress, setDownloadProgress] = useState(0)
-    const [isLoading, setIsLoading] = useState(true)
+    const [isWasmLoading, setIsWasmLoading] = useState(false)
+    const [isWasmReady, setIsWasmReady] = useState(false)
     const [isWasmCrashed, setIsWasmCrashed] = useState(false)
     const [isWasmRestarting, setIsWasmRestarting] = useState(false)
     const wasmBytesCache = useRef<ArrayBuffer | null>(null)
+    const wasmInitializationStarted = useRef(false)
 
     const { data: configProfile, isLoading: isConfigProfileLoading } = useGetConfigProfile({
         route: { uuid: uuid! },
@@ -30,11 +32,15 @@ export function ConfigProfileByUuidPageConnector() {
     const { data: snippets, isLoading: isSnippetsLoading } = useGetSnippets({})
 
     const initWasm = useCallback(async (isRestart = false) => {
+        if (!isRestart && wasmInitializationStarted.current) return
+        wasmInitializationStarted.current = true
+
         if (isRestart) {
             setIsWasmRestarting(true)
             setIsWasmCrashed(false)
+            setIsWasmReady(false)
         } else {
-            setIsLoading(true)
+            setIsWasmLoading(true)
             setDownloadProgress(0)
         }
 
@@ -65,15 +71,17 @@ export function ConfigProfileByUuidPageConnector() {
             await wasmInitialized
 
             if (typeof window.XrayParseConfig === 'function') {
-                setIsLoading(false)
+                setIsWasmReady(true)
+                setIsWasmLoading(false)
                 setIsWasmRestarting(false)
             } else {
                 throw new Error('XrayParseConfig not initialized')
             }
         } catch (err: unknown) {
             consola.error('WASM initialization error:', err)
-            setIsLoading(false)
+            setIsWasmLoading(false)
             setIsWasmRestarting(false)
+            setIsWasmCrashed(true)
         }
     }, [])
 
@@ -81,9 +89,12 @@ export function ConfigProfileByUuidPageConnector() {
         initWasm(true)
     }, [initWasm])
 
-    useLayoutEffect(() => {
-        initWasm()
+    useEffect(() => {
+        if (configProfile?.coreType !== 'xray') return
+        void Promise.resolve().then(() => initWasm())
+    }, [configProfile?.coreType, initWasm])
 
+    useEffect(() => {
         return () => {
             delete window.onWasmInitialized
         }
@@ -93,8 +104,27 @@ export function ConfigProfileByUuidPageConnector() {
         return <Navigate to={ROUTES.DASHBOARD.MANAGEMENT.CONFIG_PROFILES} />
     }
 
-    if (isLoading || isConfigProfileLoading || !configProfile || isSnippetsLoading || !snippets) {
-        return <LoadingScreen text="The WASM module is loading..." value={downloadProgress} />
+    const isWaitingForXrayWasm =
+        configProfile?.coreType === 'xray' && !isWasmReady && !isWasmCrashed
+
+    if (
+        isConfigProfileLoading ||
+        !configProfile ||
+        isSnippetsLoading ||
+        !snippets ||
+        isWasmLoading ||
+        isWaitingForXrayWasm
+    ) {
+        return (
+            <LoadingScreen
+                text={
+                    configProfile?.coreType === 'xray'
+                        ? 'The Xray WASM module is loading...'
+                        : 'The configuration profile is loading...'
+                }
+                value={downloadProgress}
+            />
+        )
     }
 
     return (

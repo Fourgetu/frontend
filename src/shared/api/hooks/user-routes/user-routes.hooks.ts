@@ -1,5 +1,6 @@
 import { createQueryKeys } from '@lukemorales/query-key-factory'
 import { notifications } from '@mantine/notifications'
+import { t } from 'i18next'
 import { z } from 'zod'
 
 import { createGetQueryHook, createMutationHook, errorHandler } from '../../tsq-helpers'
@@ -75,7 +76,7 @@ export const useGetUserRoutes = createGetQueryHook({
     responseSchema: routesResponseSchema,
     getQueryKey: () => userRoutesQueryKeys.getAll.queryKey,
     rQueryParams: { refetchOnMount: true },
-    errorHandler: (error) => errorHandler(error, 'Get user routes')
+    errorHandler: (error) => errorHandler(error, t('speed-limits.api.get-routes-error'))
 })
 
 export const useGetUserRouteRuntime = createGetQueryHook({
@@ -102,7 +103,7 @@ export const useGetUserRouteRuntime = createGetQueryHook({
     }),
     getQueryKey: ({ route }) => userRoutesQueryKeys.runtime(route!.nodeUuid).queryKey,
     rQueryParams: { enabled: false },
-    errorHandler: (error) => errorHandler(error, 'Get GOST runtime status')
+    errorHandler: (error) => errorHandler(error, t('speed-limits.api.get-runtime-error'))
 })
 
 export const useGetPortHoppingConfigs = createGetQueryHook({
@@ -110,7 +111,7 @@ export const useGetPortHoppingConfigs = createGetQueryHook({
     responseSchema: z.object({ response: z.array(portHoppingConfigSchema) }),
     getQueryKey: () => userRoutesQueryKeys.hoppingConfigs.queryKey,
     rQueryParams: { refetchOnMount: true },
-    errorHandler: (error) => errorHandler(error, 'Get Hysteria2 port hopping configs')
+    errorHandler: (error) => errorHandler(error, t('speed-limits.api.get-hopping-error'))
 })
 
 const invalidateRoutes = (
@@ -174,8 +175,8 @@ export const useCreateUserRoute = createMutationHook({
             invalidateRoutes(data, variables, context, queryClient)
             notifications.show({
                 color: 'teal',
-                title: 'Runtime confirmed',
-                message: 'The route was saved only after GOST accepted the forward.'
+                title: t('speed-limits.api.runtime-confirmed'),
+                message: t('speed-limits.api.route-created')
             })
         }
     }
@@ -206,8 +207,10 @@ export const useReallocateUserRoutePort = createMutationHook({
             invalidateRoutes(data, variables, context, queryClient)
             notifications.show({
                 color: 'teal',
-                title: 'Port reallocated',
-                message: `Subscription output will now use external port ${data.externalPort}.`
+                title: t('speed-limits.api.port-reallocated'),
+                message: t('speed-limits.api.port-reallocated-message', {
+                    port: data.externalPort
+                })
             })
         }
     }

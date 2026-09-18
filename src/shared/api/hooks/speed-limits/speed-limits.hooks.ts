@@ -1,5 +1,6 @@
 import { createQueryKeys } from '@lukemorales/query-key-factory'
 import { notifications } from '@mantine/notifications'
+import { t } from 'i18next'
 import { z } from 'zod'
 
 import { createGetQueryHook, createMutationHook, errorHandler } from '../../tsq-helpers'
@@ -37,11 +38,11 @@ export const useGetSpeedLimits = createGetQueryHook({
     responseSchema: speedsResponseSchema,
     getQueryKey: () => speedLimitsQueryKeys.getAll.queryKey,
     rQueryParams: { refetchOnMount: true },
-    errorHandler: (error) => errorHandler(error, 'Get speed limits')
+    errorHandler: (error) => errorHandler(error, t('speed-limits.api.get-policies-error'))
 })
 
 const success = (message: string) =>
-    notifications.show({ color: 'teal', message, title: 'Success' })
+    notifications.show({ color: 'teal', message, title: t('common.message.success') })
 
 export const useCreateSpeedLimit = createMutationHook({
     endpoint: '/api/speed-limits/',
@@ -51,7 +52,7 @@ export const useCreateSpeedLimit = createMutationHook({
     rMutationParams: {
         onSuccess: (_data, _variables, _context, queryClient) => {
             void queryClient.invalidateQueries({ queryKey: speedLimitsQueryKeys.getAll.queryKey })
-            success('Speed limit created')
+            success(t('speed-limits.api.policy-created'))
         }
     }
 })
@@ -64,7 +65,7 @@ export const useUpdateSpeedLimit = createMutationHook({
     rMutationParams: {
         onSuccess: (_data, _variables, _context, queryClient) => {
             void queryClient.invalidateQueries({ queryKey: speedLimitsQueryKeys.getAll.queryKey })
-            success('Speed limit updated and synchronized')
+            success(t('speed-limits.api.policy-updated'))
         }
     }
 })
@@ -76,7 +77,7 @@ export const useDeleteSpeedLimit = createMutationHook({
     rMutationParams: {
         onSuccess: (_data, _variables, _context, queryClient) => {
             void queryClient.invalidateQueries({ queryKey: speedLimitsQueryKeys.getAll.queryKey })
-            success('Speed limit removed; affected routes are now unlimited')
+            success(t('speed-limits.api.policy-removed'))
         }
     }
 })

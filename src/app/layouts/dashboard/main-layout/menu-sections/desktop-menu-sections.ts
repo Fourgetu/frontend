@@ -58,7 +58,7 @@ export const useDesktopMenuSections = (): MenuItem[] => {
                         id: 'users'
                     },
                     {
-                        name: 'Speed limits',
+                        name: t('speed-limits.title'),
                         href: ROUTES.DASHBOARD.MANAGEMENT.SPEED_LIMITS,
                         icon: TbGauge,
                         id: 'speed-limits'

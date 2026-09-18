@@ -2,7 +2,6 @@ import { ActionIcon, Button, CopyButton, Group, Menu, Text } from '@mantine/core
 import { useClipboard, useDisclosure } from '@mantine/hooks'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
-import { UpdateConfigProfileCommand } from '@remnawave/backend-contract'
 import { KeypairGeneratorWidget } from '@widgets/dashboard/config-profiles/keypair-generator/keypair-generator.widget'
 import consola from 'consola/browser'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +23,7 @@ import { useIsMobile } from '@shared/hooks'
 import { useDownloadTemplate } from '@shared/ui/load-templates/use-download-template'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
+import { preserveKnownCoreType } from '../config-validation/core-validation.ts'
 import { openProtocolPresetsModal } from '../protocol-presets'
 import classes from './config-editor-actions.module.css'
 import { Props } from './interfaces'
@@ -35,6 +35,7 @@ export function ConfigEditorActionsFeature(props: Props) {
         setResult,
         setIsConfigValid,
         configProfile,
+        coreType,
         hasUnsavedChanges,
         setHasUnsavedChanges,
         setOriginalValue
@@ -48,16 +49,12 @@ export function ConfigEditorActionsFeature(props: Props) {
 
     const { mutate: updateConfig, isPending: isUpdating } = useUpdateConfigProfile({
         mutationFns: {
-            onSuccess: async (
-                updatedConfigProfile: UpdateConfigProfileCommand.Response['response']
-            ) => {
-                await queryClient.refetchQueries({
-                    queryKey: QueryKeys.configProfiles.getConfigProfiles.queryKey
-                })
+            onSuccess: async (updatedConfigProfile) => {
+                const cachedConfigProfile = preserveKnownCoreType(coreType, updatedConfigProfile)
 
                 setIsConfigValid(true)
 
-                const newValue = JSON.stringify(updatedConfigProfile.config, null, 2)
+                const newValue = JSON.stringify(cachedConfigProfile.config, null, 2)
 
                 if (editorRef.current) {
                     const instance = editorRef.current
@@ -76,8 +73,19 @@ export function ConfigEditorActionsFeature(props: Props) {
                     QueryKeys.configProfiles.getConfigProfile({
                         uuid: configProfile.uuid
                     }).queryKey,
-                    updatedConfigProfile
+                    cachedConfigProfile
                 )
+
+                await Promise.all([
+                    queryClient.refetchQueries({
+                        queryKey: QueryKeys.configProfiles.getConfigProfiles.queryKey
+                    }),
+                    queryClient.refetchQueries({
+                        queryKey: QueryKeys.configProfiles.getConfigProfile({
+                            uuid: configProfile.uuid
+                        }).queryKey
+                    })
+                ])
 
                 setHasUnsavedChanges(false)
             },

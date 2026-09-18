@@ -1,3 +1,5 @@
+import type { ConfigProfileCoreType } from '../config-validation/core-validation.ts'
+
 import {
     GetSharedListsCommand,
     GetSnippetsCommand,
@@ -184,9 +186,26 @@ const resolveRootNode = (schema: IXraySchema | undefined): ISchemaNode | undefin
 export const MonacoSetupFeature = {
     setup: async (
         currentLanguage: string,
-        snippets: GetSnippetsCommand.Response['response']['snippets']
+        snippets: GetSnippetsCommand.Response['response']['snippets'],
+        coreType: ConfigProfileCoreType
     ) => {
         try {
+            if (coreType === 'singbox') {
+                const response = await axios.get(app.configEditor.singboxJsonSchemaUrl)
+
+                registerJsonSchema(
+                    {
+                        fileMatch: ['singbox-config://*'],
+                        schema: response.data,
+                        uri: 'https://singbox-config-profile-schema.json'
+                    },
+                    {
+                        schemaValidation: 'error'
+                    }
+                )
+                return
+            }
+
             const snippetNames = snippets.map((s) => s.name)
 
             let { jsonSchemaUrl } = app.configEditor
@@ -278,6 +297,7 @@ export const MonacoSetupFeature = {
             })
         } catch (error) {
             consola.error('Failed to load JSON schema:', error)
+            if (coreType === 'singbox') throw error
         }
     }
 }

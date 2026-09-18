@@ -45,7 +45,7 @@ export interface QuickDeployInboundRecord {
 
 export interface QuickDeployProfile {
     config: unknown
-    coreType?: ProxyCoreType
+    coreType: ProxyCoreType
     inbounds: QuickDeployInboundRecord[]
     isVirtual?: boolean
     name: string
@@ -403,7 +403,7 @@ export const createQuickDeploymentPlan = (
     if (profile.uuid !== parameters.profileUuid) {
         throw new Error('Selected Config Profile does not match parameters.')
     }
-    const profileCoreType = profile.coreType ?? 'xray'
+    const profileCoreType = profile.coreType
     if (profileCoreType !== parameters.coreType) {
         throw new Error(
             `Selected Config Profile belongs to ${profileCoreType}, not ${parameters.coreType}.`

@@ -48,38 +48,38 @@ export function RestartNodeModalContentFeature(props: IProps) {
             />
 
             <ActionCardShared
-                description="Rebuild and reload only the active Xray profile. sing-box and GOST keep running."
+                description={t('speed-limits.runtime.reload-xray-description')}
                 icon={<TbArrowsExchange size={22} />}
                 iconColor="blue"
                 isLoading={isPending}
                 onClick={() => {
                     restartNode({ variables: { forceRestart: true, runtime: 'xray' } })
                 }}
-                title="Reload Xray"
+                title={t('speed-limits.runtime.reload-xray')}
                 variant="soft"
             />
 
             <ActionCardShared
-                description="Rebuild and reload only the active sing-box profile. Xray and GOST keep running."
+                description={t('speed-limits.runtime.reload-singbox-description')}
                 icon={<TbArrowsExchange size={22} />}
                 iconColor="violet"
                 isLoading={isPending}
                 onClick={() => {
                     restartNode({ variables: { forceRestart: true, runtime: 'singbox' } })
                 }}
-                title="Reload sing-box"
+                title={t('speed-limits.runtime.reload-singbox')}
                 variant="soft"
             />
 
             <ActionCardShared
-                description="Reconcile GOST forwards, limiter files and port-hopping ingress from Backend desired state."
+                description={t('speed-limits.runtime.sync-gost-description')}
                 icon={<TbRoute size={22} />}
                 iconColor="orange"
                 isLoading={isPending}
                 onClick={() => {
                     restartNode({ variables: { forceRestart: false, runtime: 'gost' } })
                 }}
-                title="Sync GOST"
+                title={t('speed-limits.runtime.sync-gost')}
                 variant="soft"
             />
 
