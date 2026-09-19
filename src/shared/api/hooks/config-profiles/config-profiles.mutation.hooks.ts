@@ -6,6 +6,7 @@ import {
     SetConfigProfileTagsCommand,
     UpdateConfigProfileCommand
 } from '@remnawave/backend-contract'
+import { t } from 'i18next'
 
 import { ConfigProfileResponseWithOptionalCoreTypeSchema } from '@shared/api/types/config-profile.schema'
 
@@ -19,14 +20,14 @@ export const useUpdateConfigProfile = createMutationHook({
     rMutationParams: {
         onSuccess: () => {
             notifications.show({
-                title: 'Success',
-                message: 'Config updated successfully',
+                title: t('common.message.success'),
+                message: t('visual-config-builder.saved'),
                 color: 'teal'
             })
         },
         onError: (error) => {
             notifications.show({
-                title: `Update Config Profile`,
+                title: t('visual-config-builder.save-error'),
                 message:
                     error instanceof Error ? error.message : `Request failed with unknown error.`,
                 color: 'red'

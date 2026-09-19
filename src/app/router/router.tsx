@@ -101,6 +101,10 @@ const router = createBrowserRouter(
                             path={ROUTES.DASHBOARD.MANAGEMENT.CONFIG_PROFILE_BY_UUID}
                         />
                         <Route
+                            element={<ConfigProfileByUuidPageConnector initialMode="visual" />}
+                            path={ROUTES.DASHBOARD.MANAGEMENT.CONFIG_PROFILE_VISUAL}
+                        />
+                        <Route
                             element={<InternalSquadsPageConnector />}
                             path={ROUTES.DASHBOARD.MANAGEMENT.INTERNAL_SQUADS}
                         />

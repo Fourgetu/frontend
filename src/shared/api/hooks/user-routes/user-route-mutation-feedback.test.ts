@@ -24,10 +24,14 @@ const locales = {
 
 const routeQueryKey = ['userRoutes', 'getAll'] as const
 
-const createFeedback = (locale: keyof typeof locales = 'zh') => {
+const createFeedback = (
+    locale: keyof typeof locales = 'zh',
+    operation: 'create' | 'update' = 'create'
+) => {
     const notifications: { color: string; title: string; message: string }[] = []
     const invalidations: unknown[] = []
     const callbacks = createUserRouteMutationCallbacks({
+        operation,
         invalidateRoutes: (data, _variables, _context, queryClient) => {
             invalidations.push(data)
             void queryClient.invalidateQueries({ queryKey: routeQueryKey })
@@ -192,6 +196,142 @@ test('successful route mutation preserves cache invalidation, success notificati
             }
         ])
     } finally {
+        observer.reset()
+        queryClient.clear()
+    }
+})
+
+test('update route callback shows localized GOST/TLS guidance for normalized HTTP 502/A271', () => {
+    const { callbacks, notifications } = createFeedback('zh', 'update')
+    callbacks.onError(normalizeRuntimeError())
+
+    assert.deepEqual(notifications, [
+        {
+            color: 'red',
+            title: '更新用户线路失败',
+            message: 'Node GOST 同步失败，请检查节点连接或 TLS 配置。'
+        }
+    ])
+    assert.doesNotMatch(JSON.stringify(notifications), /sensitive-|node\.invalid|payload/)
+})
+
+test('update route callback recognizes an unwrapped HTTP 502/A271 error in English', () => {
+    const { callbacks, notifications } = createFeedback('en', 'update')
+    callbacks.onError(runtimeAxiosError())
+
+    assert.deepEqual(notifications, [
+        {
+            color: 'red',
+            title: 'Update user route failed',
+            message:
+                'Node GOST synchronization failed. Check the node connection or TLS configuration.'
+        }
+    ])
+})
+
+test('unknown update errors display safe guidance without leaking server or request data', () => {
+    const { callbacks, notifications } = createFeedback('zh', 'update')
+    callbacks.onError({
+        response: {
+            status: 400,
+            data: { errorCode: 'A267', message: 'sensitive-password', secretKey: 'sensitive-key' }
+        }
+    })
+
+    assert.deepEqual(notifications, [
+        {
+            color: 'red',
+            title: '更新用户线路失败',
+            message: '无法完成用户线路操作，请刷新线路列表确认状态后重试。'
+        }
+    ])
+    assert.doesNotMatch(JSON.stringify(notifications), /sensitive-/)
+})
+
+test('failed update finishes loading, retains the edit modal and skips cache invalidation', async () => {
+    const queryClient = createQueryClient()
+    const { callbacks, notifications, invalidations } = createFeedback('zh', 'update')
+    const pending = Promise.withResolvers<unknown>()
+    let modalOpen = true
+    let settled = false
+    const observer = new MutationObserver(queryClient, {
+        mutationFn: () => pending.promise,
+        onSuccess: (data, variables, context) =>
+            callbacks.onSuccess(data, variables, context, queryClient),
+        onError: callbacks.onError,
+        onSettled: () => {
+            settled = true
+        }
+    })
+    const unsubscribe = observer.subscribe(() => {})
+
+    try {
+        const result = observer.mutate(undefined, {
+            onSuccess: () => {
+                modalOpen = false
+            }
+        })
+        assert.equal(observer.getCurrentResult().isPending, true)
+        pending.reject(normalizeRuntimeError())
+        await assert.rejects(result)
+
+        assert.equal(observer.getCurrentResult().isPending, false)
+        assert.equal(observer.getCurrentResult().isError, true)
+        assert.equal(settled, true)
+        assert.equal(modalOpen, true)
+        assert.equal(notifications.length, 1)
+        assert.equal(notifications[0].color, 'red')
+        assert.deepEqual(invalidations, [])
+    } finally {
+        unsubscribe()
+        observer.reset()
+        queryClient.clear()
+    }
+})
+
+test('successful update preserves invalidation, localized feedback and per-call modal close', async () => {
+    const queryClient = createQueryClient()
+    const { callbacks, notifications, invalidations } = createFeedback('zh', 'update')
+    const route = {
+        uuid: '00000000-0000-4000-8000-000000000001',
+        externalPort: 32000,
+        portHoppingConfigUuid: '00000000-0000-4000-8000-000000000002'
+    }
+    const pending = Promise.withResolvers<typeof route>()
+    let modalOpen = true
+    const observer = new MutationObserver(queryClient, {
+        mutationFn: () => pending.promise,
+        onSuccess: (data, variables, context) =>
+            callbacks.onSuccess(data, variables, context, queryClient),
+        onError: callbacks.onError
+    })
+    const unsubscribe = observer.subscribe(() => {})
+    queryClient.setQueryData(routeQueryKey, [])
+
+    try {
+        const result = observer.mutate(undefined, {
+            onSuccess: () => {
+                modalOpen = false
+            }
+        })
+        assert.equal(observer.getCurrentResult().isPending, true)
+        pending.resolve(route)
+        assert.deepEqual(await result, route)
+
+        assert.equal(observer.getCurrentResult().isPending, false)
+        assert.equal(observer.getCurrentResult().isSuccess, true)
+        assert.equal(modalOpen, false)
+        assert.equal(queryClient.getQueryState(routeQueryKey)?.isInvalidated, true)
+        assert.deepEqual(invalidations, [route])
+        assert.deepEqual(notifications, [
+            {
+                color: 'teal',
+                title: '运行状态已确认',
+                message: '用户线路已更新并同步，请更新客户端订阅以获取最新端口配置。'
+            }
+        ])
+    } finally {
+        unsubscribe()
         observer.reset()
         queryClient.clear()
     }

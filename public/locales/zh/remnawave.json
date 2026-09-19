@@ -2136,8 +2136,8 @@
       "dynamic": "动态"
     },
     "alerts": {
-      "explicit-title": "仅支持显式 GOST 限速模式",
-      "explicit-description": "现有公开监听的代理内核入站不会自动迁移。仅当所选入站已明确监听本机回环地址时才能创建用户线路；删除线路后，订阅将恢复使用 Host 端口。",
+      "explicit-title": "GOST 限速与公开入站兼容模式",
+      "explicit-description": "默认要求入站明确监听本机回环地址。Xray 0.0.0.0 入站可手动开启公开入站兼容模式；原公网端口仍可绕过 GOST。不会自动修改内核监听、防火墙或原有直连线路；删除线路后，订阅恢复使用 Host 端口。",
       "assignment-title": "限速绑定线路，而非用户身份",
       "assignment-description": "GOST 会在 Xray 或 sing-box 验证协议凭据之前，根据外部目标端口选择对应的限速桶。若用户知道指向同一入站的其他线路端口，也可能使用该线路对应的限速桶。因此应将外部线路端口视为敏感的分配信息；此模式并不是用于隔离互不信任用户的加密级配额边界。"
     },
@@ -2176,6 +2176,15 @@
       "reallocate-port": "重新分配外部端口",
       "remove-and-restore": "删除线路并恢复使用 Host 端口",
       "create": "新建用户 GOST 线路",
+      "edit": "编辑用户 GOST 线路",
+      "edit-description": "可修改限速策略和端口跳跃绑定。用户、节点、入站、Host 及现有标准外部端口保持不变。",
+      "save-and-verify": "保存并验证运行状态",
+      "edit-hopping-description": "选择端口池后保存，将为此线路分配跳跃端口范围；选择“仅使用标准外部端口”可关闭端口跳跃。保存成功后请更新客户端订阅。未修改的跳跃绑定不会重新分配端口。",
+      "hopping-unassigned": "当前线路尚未分配跳跃端口范围。",
+      "current-policy-unavailable": "当前绑定的限速策略不可用",
+      "current-hopping-unavailable": "当前绑定的端口跳跃配置不可用",
+      "keep-unavailable-hopping": "当前绑定的端口跳跃配置已禁用或不可用。保持此项不变不会清除绑定，也可选择仅使用标准外部端口。",
+      "invalid-hopping-selection": "请选择同一入站已启用的端口跳跃配置，或仅使用标准外部端口。",
       "public-inbound-warning": "此入站正在公开监听，或未明确设置监听地址。请先在内核配置中将监听地址改为 127.0.0.1/::1，再创建限速线路。",
       "hopping-available-description": "为用户分配稳定的 UDP 端口范围；不支持端口跳跃的订阅格式将使用标准外部端口。",
       "hopping-unavailable-description": "仅当已启用的 sing-box Hysteria2 入站存在已启用的端口跳跃配置时可用。",
@@ -2183,6 +2192,9 @@
       "network-derived": "根据所选代理内核入站自动确定",
       "automatic-port": "自动分配（32000–32999）",
       "safety-confirmation": "我确认此入站有意使用 GOST 限速模式，并且已阻止通过代理内核端口直接公开访问。",
+      "public-compatibility": "公开入站兼容模式（仅 Xray 0.0.0.0）",
+      "public-compatibility-warning": "开启后，GOST 使用新分配的公网端口，经 127.0.0.1 转发到原 Xray 入站。只有经过 GOST 的连接受到限速；原公网内核端口仍可直连、绕过限速。不会自动修改 Xray 配置或防火墙。",
+      "public-compatibility-confirmation": "我理解原公网内核端口仍可绕过 GOST 限速，并确认以公开入站兼容模式创建此线路。",
       "create-and-verify": "创建并验证运行状态"
     },
     "hopping": {
@@ -2234,6 +2246,8 @@
       "policy-removed": "限速策略已删除；受影响的线路现已恢复为不限速",
       "get-routes-error": "获取用户线路失败",
       "create-route-error": "创建用户线路失败",
+      "update-route-error": "更新用户线路失败",
+      "route-updated": "用户线路已更新并同步，请更新客户端订阅以获取最新端口配置。",
       "create-route-unknown-error": "无法完成用户线路操作，请刷新线路列表确认状态后重试。",
       "runtime-sync-failed": "Node GOST 同步失败，请检查节点连接或 TLS 配置。",
       "get-runtime-error": "获取 GOST 运行状态失败",
@@ -2316,6 +2330,9 @@
     "invalid-preset": "所选预设无效。",
     "invalid-template": "所选模板无效。",
     "review-json": "在 JSON 中查看",
+    "save-validation-failed": "配置校验未通过，尚未保存。请查看校验提示并修改后重试。",
+    "saved": "配置已保存。",
+    "save-error": "配置保存失败",
     "status": {
       "xray-restarting": "Xray 内核（WASM）正在重启……",
       "xray-crashed": "Xray 内核（WASM）已崩溃，无法进行验证。"

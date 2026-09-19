@@ -16,4 +16,10 @@ export interface Props {
     setIsConfigValid: (value: boolean) => void
     setOriginalValue: (value: string) => void
     setResult: (value: string) => void
+    saveOnly?: boolean
+    saveDisabled?: boolean
+    getSaveValue?: () => string
+    validateBeforeSave?: (value: string) => Promise<boolean>
+    onSaved?: (value: string) => void
+    onSavingChange?: (saving: boolean) => void
 }

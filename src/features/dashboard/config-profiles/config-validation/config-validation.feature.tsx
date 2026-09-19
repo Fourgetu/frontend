@@ -82,8 +82,11 @@ interface JsonValidationWorker {
     doValidation: (uri: string) => Promise<JsonSchemaDiagnostic[]>
 }
 
+// A mounted Monaco editor or a temporary model used by the graphical Save action.
+type ConfigValidationSource = Pick<editor.IStandaloneCodeEditor, 'getValue' | 'getModel'>
+
 const validateWithSingboxSchema = async (
-    editorInstance: editor.IStandaloneCodeEditor
+    editorInstance: ConfigValidationSource
 ): Promise<string | undefined> => {
     const model = editorInstance.getModel()
     if (!model || model.uri.scheme !== 'singbox-config') {
@@ -103,11 +106,11 @@ const validateWithSingboxSchema = async (
         .join(' | ')
 }
 
-const validationRuns = new WeakMap<editor.IStandaloneCodeEditor, number>()
+const validationRuns = new WeakMap<ConfigValidationSource, number>()
 
 export const ConfigValidationFeature = {
     validate: async (
-        editorRef: RefObject<editor.IStandaloneCodeEditor | null>,
+        editorRef: RefObject<ConfigValidationSource | null>,
 
         setResult: (message: string) => void,
         setIsConfigValid: (isValid: boolean) => void,

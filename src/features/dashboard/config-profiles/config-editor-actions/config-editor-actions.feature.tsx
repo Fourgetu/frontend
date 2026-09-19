@@ -4,6 +4,7 @@ import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { KeypairGeneratorWidget } from '@widgets/dashboard/config-profiles/keypair-generator/keypair-generator.widget'
 import consola from 'consola/browser'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PiCheck, PiCheckSquareOffset, PiCopy, PiFloppyDisk } from 'react-icons/pi'
 import {
@@ -24,6 +25,7 @@ import { useDownloadTemplate } from '@shared/ui/load-templates/use-download-temp
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
 import { preserveKnownCoreType } from '../config-validation/core-validation.ts'
+import { validateVisualSave } from '../config-validation/visual-draft.ts'
 import { openProtocolPresetsModal } from '../protocol-presets'
 import classes from './config-editor-actions.module.css'
 import { Props } from './interfaces'
@@ -46,8 +48,10 @@ export function ConfigEditorActionsFeature(props: Props) {
     const clipboard = useClipboard({ timeout: 500 })
 
     const [opened, handlers] = useDisclosure(false)
+    const saveInFlight = useRef(false)
+    const [isValidating, setIsValidating] = useState(false)
 
-    const { mutate: updateConfig, isPending: isUpdating } = useUpdateConfigProfile({
+    const { mutateAsync: updateConfig, isPending: isUpdating } = useUpdateConfigProfile({
         mutationFns: {
             onSuccess: async (updatedConfigProfile) => {
                 const cachedConfigProfile = preserveKnownCoreType(coreType, updatedConfigProfile)
@@ -65,9 +69,10 @@ export function ConfigEditorActionsFeature(props: Props) {
                         instance.setValue(newValue)
                         instance.restoreViewState(viewState)
                     }
-
-                    setOriginalValue(newValue)
                 }
+                setOriginalValue(newValue)
+                props.onSaved?.(newValue)
+                setHasUnsavedChanges(false)
 
                 await queryClient.setQueryData(
                     QueryKeys.configProfiles.getConfigProfile({
@@ -86,8 +91,6 @@ export function ConfigEditorActionsFeature(props: Props) {
                         }).queryKey
                     })
                 ])
-
-                setHasUnsavedChanges(false)
             },
             onError: (error) => {
                 setIsConfigValid(false)
@@ -102,11 +105,10 @@ export function ConfigEditorActionsFeature(props: Props) {
         editorRef
     })
 
-    const handleSave = () => {
-        if (!editorRef.current) return
-
-        const currentValue = editorRef.current.getValue()
-
+    const handleSave = async () => {
+        if (saveInFlight.current || props.saveDisabled) return
+        const currentValue = props.getSaveValue?.() ?? editorRef.current?.getValue()
+        if (!currentValue) return
         try {
             JSON.parse(currentValue)
         } catch (error) {
@@ -119,13 +121,31 @@ export function ConfigEditorActionsFeature(props: Props) {
             return
         }
 
-        if (currentValue) {
-            updateConfig({
-                variables: {
-                    uuid: configProfile.uuid,
-                    config: JSON.parse(currentValue)
+        saveInFlight.current = true
+        setIsValidating(true)
+        props.onSavingChange?.(true)
+        try {
+            const save = (config: Record<string, unknown>) =>
+                updateConfig({ variables: { uuid: configProfile.uuid, config } })
+            if (props.validateBeforeSave) {
+                const saved = await validateVisualSave(currentValue, props.validateBeforeSave, save)
+                if (!saved) {
+                    notifications.show({
+                        color: 'red',
+                        title: t('common.message.error'),
+                        message: t('visual-config-builder.save-validation-failed')
+                    })
                 }
-            })
+            } else {
+                await save(JSON.parse(currentValue))
+            }
+        } catch {
+            // The mutation already reports API failures. Validation errors remain visible
+            // in the graphical status area; do not clear or replace the unsaved draft.
+        } finally {
+            saveInFlight.current = false
+            setIsValidating(false)
+            props.onSavingChange?.(false)
         }
     }
 
@@ -236,14 +256,28 @@ export function ConfigEditorActionsFeature(props: Props) {
         })
     }
 
+    if (props.saveOnly) {
+        return (
+            <Button
+                disabled={props.saveDisabled || !hasUnsavedChanges}
+                leftSection={<PiFloppyDisk size={16} />}
+                loading={isUpdating || isValidating}
+                onClick={() => void handleSave()}
+                variant="filled"
+            >
+                {t('common.action.save')}
+            </Button>
+        )
+    }
+
     return (
         <Group grow={isMobile} preventGrowOverflow={false} wrap="wrap">
             <Button
                 color={!hasUnsavedChanges ? 'gray' : 'teal'}
                 disabled={!isConfigValid && !hasUnsavedChanges}
                 leftSection={<PiFloppyDisk size={16} />}
-                loading={isUpdating}
-                onClick={handleSave}
+                loading={isUpdating || isValidating}
+                onClick={() => void handleSave()}
                 variant="soft"
             >
                 {t('common.action.save')}

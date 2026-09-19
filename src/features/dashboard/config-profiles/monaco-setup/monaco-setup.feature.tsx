@@ -14,6 +14,8 @@ import { app } from 'src/config'
 
 import { registerJsonSchema } from '@shared/utils/monaco/json-schema-registry'
 
+import { isUsableCoreSchema } from '../config-validation/core-validation.ts'
+
 interface ISchemaNode {
     allOf?: ISchemaNode[]
     anyOf?: ISchemaNode[]
@@ -220,6 +222,9 @@ export const MonacoSetupFeature = {
         try {
             if (coreType === 'singbox') {
                 const response = await axios.get(app.configEditor.singboxJsonSchemaUrl)
+                if (!isUsableCoreSchema(response.data)) {
+                    throw new Error('sing-box JSON schema asset is unavailable or invalid')
+                }
 
                 registerJsonSchema(
                     {
@@ -247,6 +252,9 @@ export const MonacoSetupFeature = {
 
             const response = await axios.get(jsonSchemaUrl)
             const schema = response.data
+            if (!isUsableCoreSchema(schema)) {
+                throw new Error('Xray JSON schema asset is unavailable or invalid')
+            }
 
             injectXrayMixedProtocolSchema(schema.definitions?.InboundObject)
 

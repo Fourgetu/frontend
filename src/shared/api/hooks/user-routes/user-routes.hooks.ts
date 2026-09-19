@@ -50,6 +50,7 @@ const createRouteBodySchema = z.object({
     speedLimitUuid: z.uuid().nullable().optional(),
     portHoppingConfigUuid: z.uuid().nullable().optional(),
     externalPort: z.number().int().min(1).max(65535).optional(),
+    allowPublicInbound: z.boolean().optional(),
     internalAddress: z.enum(['127.0.0.1', '::1']),
     internalPort: z.number().int().min(1).max(65535),
     network: z.enum(['tcp', 'udp']),
@@ -183,7 +184,12 @@ export const useUpdateUserRoute = createMutationHook({
     requestMethod: 'patch',
     bodySchema: updateRouteBodySchema,
     responseSchema: routeResponseSchema,
-    rMutationParams: { onSuccess: invalidateRoutes }
+    rMutationParams: createUserRouteMutationCallbacks({
+        operation: 'update',
+        invalidateRoutes,
+        notify: (notification) => notifications.show({ ...notification }),
+        translate: (key) => t(key)
+    })
 })
 
 export const useDeleteUserRoute = createMutationHook({

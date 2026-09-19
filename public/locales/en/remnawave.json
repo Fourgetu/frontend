@@ -2137,8 +2137,8 @@
       "dynamic": "dynamic"
     },
     "alerts": {
-      "explicit-title": "Explicit GOST limiter mode only",
-      "explicit-description": "Existing public proxy-core inbounds are never migrated automatically. A route can be created only when the selected inbound already listens explicitly on loopback; removing the route restores the subscription to the Host port.",
+      "explicit-title": "GOST limiting and public-inbound compatibility",
+      "explicit-description": "An explicit loopback listener is required by default. Xray 0.0.0.0 inbounds may opt into public-inbound compatibility; the original public port can still bypass GOST. Core listeners, firewall rules and existing direct routes are never changed automatically. Removing the route restores the subscription to the Host port.",
       "assignment-title": "Route-assigned limit, not identity-bound",
       "assignment-description": "GOST selects the limiter bucket from the external destination port before Xray or sing-box authenticates the protocol credential. A user who knows another route port targeting the same inbound may select that route's bucket. Treat external route ports as sensitive assignment data; this mode is not a cryptographic quota boundary between mutually hostile users."
     },
@@ -2177,6 +2177,15 @@
       "reallocate-port": "Reallocate external port",
       "remove-and-restore": "Remove route and restore Host port",
       "create": "Create per-user GOST route",
+      "edit": "Edit per-user GOST route",
+      "edit-description": "Change the speed policy and port-hopping assignment. The user, node, inbound, Host, and existing canonical external port stay unchanged.",
+      "save-and-verify": "Save and verify runtime",
+      "edit-hopping-description": "Save with a pool selected to allocate a hopping range for this route, or select the canonical port only to turn hopping off. Refresh the client subscription after a successful save. An unchanged hopping assignment is not reallocated.",
+      "hopping-unassigned": "This route has no hopping port range assigned.",
+      "current-policy-unavailable": "The currently assigned speed policy is unavailable",
+      "current-hopping-unavailable": "The currently assigned hopping config is unavailable",
+      "keep-unavailable-hopping": "The currently assigned hopping config is disabled or unavailable. Leaving this selection unchanged preserves its assignment; you can also switch to the canonical port only.",
+      "invalid-hopping-selection": "Select an enabled hopping config for the same inbound, or use the canonical port only.",
       "public-inbound-warning": "This inbound is public or has no explicit listen address. Edit its core config to listen on 127.0.0.1/::1 before creating a limited route.",
       "hopping-available-description": "Allocates a stable per-user UDP range; subscription formats without hopping support use the canonical external port.",
       "hopping-unavailable-description": "Available only for an active sing-box Hysteria2 inbound with an enabled hopping config.",
@@ -2184,6 +2193,9 @@
       "network-derived": "Derived from the selected proxy-core inbound",
       "automatic-port": "Automatic (32000–32999)",
       "safety-confirmation": "I confirm this inbound is intentionally in GOST limiter mode and direct public access to its proxy-core port is blocked.",
+      "public-compatibility": "Public-inbound compatibility (Xray 0.0.0.0 only)",
+      "public-compatibility-warning": "GOST uses a newly allocated public port and forwards through 127.0.0.1 to the existing Xray inbound. Only traffic through GOST is rate limited; the original public core port remains directly accessible and can bypass limits. Xray configuration and firewall rules are not changed automatically.",
+      "public-compatibility-confirmation": "I understand that the original public core port can bypass GOST limits and confirm creating this route in public-inbound compatibility mode.",
       "create-and-verify": "Create and verify runtime"
     },
     "hopping": {
@@ -2235,6 +2247,8 @@
       "policy-removed": "Speed limit removed; affected routes are now unlimited",
       "get-routes-error": "Get user routes",
       "create-route-error": "Create user route failed",
+      "update-route-error": "Update user route failed",
+      "route-updated": "The route was updated and synchronized. Refresh the client subscription to receive the latest port settings.",
       "create-route-unknown-error": "Unable to complete the user route operation. Refresh the route list to check its status before retrying.",
       "runtime-sync-failed": "Node GOST synchronization failed. Check the node connection or TLS configuration.",
       "get-runtime-error": "Get GOST runtime status",
@@ -2317,6 +2331,9 @@
     "invalid-preset": "The selected preset is invalid.",
     "invalid-template": "The selected template is invalid.",
     "review-json": "Review in JSON",
+    "save-validation-failed": "Configuration validation failed; nothing was saved. Review the validation details and try again.",
+    "saved": "Configuration saved.",
+    "save-error": "Failed to save configuration",
     "status": {
       "xray-restarting": "Xray Core (WASM) is restarting...",
       "xray-crashed": "Xray Core (WASM) crashed. Validation is unavailable."

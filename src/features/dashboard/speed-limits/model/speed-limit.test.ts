@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { isPublicInboundCompatibilityAvailable, resolveGostTargetAddress } from './speed-limit.ts'
 import {
     bytesPerSecondToMbps,
     getGostForwardNetwork,
@@ -192,4 +193,38 @@ test('resolves sing-box listen address from profile config when list rawInbound 
         ),
         '127.0.0.1'
     )
+})
+
+test('public Xray compatibility is opt-in, requires acknowledgement and uses IPv4 loopback', () => {
+    const form = {
+        ...readyRouteForm,
+        coreType: 'xray',
+        internalAddress: '0.0.0.0',
+        inboundUuid: XRAY_INBOUND_UUID,
+        selectedInbound: { uuid: XRAY_INBOUND_UUID, profileUuid: XRAY_PROFILE_UUID, port: 34397 },
+        selectedHost: {
+            uuid: compatibleSingBoxHost.uuid,
+            ...host(XRAY_PROFILE_UUID, XRAY_INBOUND_UUID)
+        }
+    }
+    assert.equal(isUserRouteFormReady(form), false)
+    assert.equal(isUserRouteFormReady({ ...form, allowPublicInbound: true }), true)
+    assert.equal(
+        isUserRouteFormReady({ ...form, allowPublicInbound: true, safetyConfirmed: false }),
+        false
+    )
+    assert.equal(resolveGostTargetAddress('0.0.0.0', 'xray', true), '127.0.0.1')
+    assert.equal(resolveGostTargetAddress('0.0.0.0', 'xray', false), undefined)
+    assert.equal(resolveGostTargetAddress('::1', 'xray'), '::1')
+})
+
+test('public compatibility does not permit unknown/sing-box cores or arbitrary listen addresses', () => {
+    for (const coreType of [undefined, 'singbox', 'unknown']) {
+        assert.equal(isPublicInboundCompatibilityAvailable(coreType, '0.0.0.0'), false)
+        assert.equal(resolveGostTargetAddress('0.0.0.0', coreType, true), undefined)
+    }
+    for (const listen of [undefined, '', '::', '192.0.2.1', 'localhost']) {
+        assert.equal(isPublicInboundCompatibilityAvailable('xray', listen), false)
+        assert.equal(resolveGostTargetAddress(listen, 'xray', true), undefined)
+    }
 })

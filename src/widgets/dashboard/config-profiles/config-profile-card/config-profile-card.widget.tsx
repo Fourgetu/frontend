@@ -1,4 +1,15 @@
-import { Badge, Box, CopyButton, Divider, Group, Loader, Menu, Text, Tooltip } from '@mantine/core'
+import {
+    Badge,
+    Box,
+    Button,
+    CopyButton,
+    Divider,
+    Group,
+    Loader,
+    Menu,
+    Text,
+    Tooltip
+} from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { GetConfigProfilesCommand } from '@remnawave/backend-contract'
@@ -204,6 +215,20 @@ export function ConfigProfileCardWidget(props: IProps) {
                 </EntityCardShared.Header>
 
                 <EntityCardShared.Actions>
+                    <Button
+                        size="compact-sm"
+                        variant="light"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            navigate(
+                                generatePath(ROUTES.DASHBOARD.MANAGEMENT.CONFIG_PROFILE_VISUAL, {
+                                    uuid: configProfile.uuid
+                                })
+                            )
+                        }}
+                    >
+                        {t('visual-config-builder.visual')}
+                    </Button>
                     <EntityCardShared.Menu>
                         <Menu.Item
                             leftSection={<TbEye size={18} />}

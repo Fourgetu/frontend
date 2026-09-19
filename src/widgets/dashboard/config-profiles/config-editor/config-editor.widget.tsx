@@ -6,6 +6,7 @@ import {
     getConfigProfileModelUri,
     isConfigProfileCoreType
 } from '@features/dashboard/config-profiles/config-validation/core-validation.ts'
+import { createVisualDraft } from '@features/dashboard/config-profiles/config-validation/visual-draft.ts'
 import { MonacoSetupFeature } from '@features/dashboard/config-profiles/monaco-setup'
 import {
     Alert,
@@ -58,15 +59,29 @@ export function ConfigEditorWidget(props: IProps) {
 
     const { configProfile, isWasmCrashed, isWasmRestarting, onRestartWasm, snippets } = props
 
+    const [initialVisualDraft] = useState(() =>
+        props.initialMode === 'visual'
+            ? createVisualDraft(JSON.stringify(configProfile.config), configProfile.coreType)
+            : null
+    )
     const [result, setResult] = useState('')
     const [isConfigValid, setIsConfigValid] = useState(true)
     const [readySchemaKey, setReadySchemaKey] = useState<string | null>(null)
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-    const [mode, setMode] = useState<'visual' | 'json'>('json')
+    const [mode, setMode] = useState<'visual' | 'json'>(props.initialMode ?? 'json')
+    const [isVisualSaving, setIsVisualSaving] = useState(false)
     const [jsonValue, setJsonValue] = useState(JSON.stringify(configProfile.config, null, 2) || '')
-    const [visualConfig, setVisualConfig] = useState<JsonObject | null>(null)
-    const [visualDocument, setVisualDocument] = useState<VisualDocument | null>(null)
-    const [visualError, setVisualError] = useState<string | null>(null)
+    const [visualConfig, setVisualConfig] = useState<JsonObject | null>(
+        initialVisualDraft?.config ?? null
+    )
+    const [visualDocument, setVisualDocument] = useState<VisualDocument | null>(
+        initialVisualDraft?.document ?? null
+    )
+    const [visualError, setVisualError] = useState<string | null>(
+        props.initialMode === 'visual' && !initialVisualDraft
+            ? t('visual-config-builder.errors.json-invalid')
+            : null
+    )
     const [visualChangeDescription, setVisualChangeDescription] = useState('')
     const [originalValue, setOriginalValue] = useState<string>(
         JSON.stringify(configProfile.config, null, 2) || ''
@@ -74,6 +89,7 @@ export function ConfigEditorWidget(props: IProps) {
 
     const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
     const wasWasmRestarting = useRef(false)
+    const visualValidationSequence = useRef(0)
 
     const coreType = configProfile.coreType
     const hasKnownCoreType = isConfigProfileCoreType(coreType)
@@ -129,11 +145,13 @@ export function ConfigEditorWidget(props: IProps) {
 
     const blocker = useBlocker(
         ({ currentLocation, nextLocation }) =>
-            hasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname
+            (hasUnsavedChanges || isVisualSaving) &&
+            currentLocation.pathname !== nextLocation.pathname
     )
 
     const parseCurrentJson = (): JsonObject | null => {
         const currentValue = editorRef.current?.getValue() ?? jsonValue
+        setJsonValue(currentValue)
         try {
             const parsed: unknown = JSON.parse(currentValue)
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -143,16 +161,18 @@ export function ConfigEditorWidget(props: IProps) {
         } catch {
             setVisualError(t('visual-config-builder.errors.json-invalid'))
             setVisualDocument(null)
+            setVisualConfig(null)
             setMode('visual')
             return null
         }
     }
 
     const handleModeChange = (nextMode: 'visual' | 'json') => {
-        if (nextMode === mode) return
+        if (nextMode === mode || isVisualSaving) return
 
         if (nextMode === 'visual') {
             const parsed = parseCurrentJson()
+            editorRef.current = null
             if (!parsed) return
             setVisualConfig(parsed)
             setVisualDocument(parseConfigProfile(parsed, coreType))
@@ -161,7 +181,7 @@ export function ConfigEditorWidget(props: IProps) {
             return
         }
 
-        if (visualError && !visualConfig) {
+        if (visualError) {
             setVisualError(null)
             setMode('json')
             return
@@ -259,6 +279,68 @@ export function ConfigEditorWidget(props: IProps) {
 
     const modelUri = getConfigProfileModelUri(coreType, configProfile.uuid)
 
+    const handleVisualChange = (nextConfig: JsonObject, description: string) => {
+        setVisualConfig(nextConfig)
+        setVisualDocument(parseConfigProfile(nextConfig, coreType))
+        setVisualChangeDescription(description)
+        setHasUnsavedChanges(JSON.stringify(nextConfig, null, 2) !== originalValue)
+        setResult('')
+    }
+
+    const validateVisualValue = async (value: string): Promise<boolean> => {
+        if (
+            !monaco ||
+            !isSchemaReady ||
+            (coreType === 'xray' && (isWasmCrashed || isWasmRestarting))
+        )
+            return false
+
+        // The graphical editor has no mounted JSON editor. Give the shared validator
+        // a temporary model with the same core-specific schema, then dispose it.
+        const uri = monaco.Uri.parse(
+            getConfigProfileModelUri(
+                coreType,
+                `${configProfile.uuid}-visual-save-${++visualValidationSequence.current}`
+            )
+        )
+        let model: editor.ITextModel | null = null
+        let valid = false
+        try {
+            model = monaco.editor.createModel(value, 'json', uri)
+            const validationModel = model
+            await ConfigValidationFeature.validate(
+                {
+                    current: {
+                        getValue: () => validationModel.getValue(),
+                        getModel: () => validationModel
+                    }
+                },
+                setResult,
+                (nextValid) => {
+                    valid = nextValid
+                    setIsConfigValid(nextValid)
+                },
+                snippetMap,
+                coreType
+            )
+            return valid
+        } catch {
+            setIsConfigValid(false)
+            setResult(t('visual-config-builder.errors.schema-unavailable'))
+            return false
+        } finally {
+            model?.dispose()
+        }
+    }
+
+    const handleSavedValue = (value: string) => {
+        setJsonValue(value)
+        const draft = createVisualDraft(value, coreType)
+        setVisualConfig(draft?.config ?? null)
+        setVisualDocument(draft?.document ?? null)
+        setVisualChangeDescription('')
+    }
+
     const statusBar = (result || isWasmRestarting || isWasmCrashed) && (
         <EditorStatusBar
             status={isWasmCrashed || isWasmRestarting || !isConfigValid ? 'error' : 'success'}
@@ -347,45 +429,25 @@ export function ConfigEditorWidget(props: IProps) {
                 config={visualConfig ?? visualDocument.rawSnapshot}
                 coreType={visualDocument.coreType}
                 document={visualDocument}
-                onConfigChange={(nextConfig, description) => {
-                    setVisualConfig(nextConfig)
-                    setVisualDocument(parseConfigProfile(nextConfig, coreType))
-                    setVisualChangeDescription(description)
-                    setHasUnsavedChanges(JSON.stringify(nextConfig, null, 2) !== originalValue)
-                }}
+                onConfigChange={handleVisualChange}
             />
             <OutboundVisualManager
                 config={visualConfig ?? visualDocument.rawSnapshot}
                 coreType={visualDocument.coreType}
                 document={visualDocument}
-                onConfigChange={(nextConfig, description) => {
-                    setVisualConfig(nextConfig)
-                    setVisualDocument(parseConfigProfile(nextConfig, coreType))
-                    setVisualChangeDescription(description)
-                    setHasUnsavedChanges(JSON.stringify(nextConfig, null, 2) !== originalValue)
-                }}
+                onConfigChange={handleVisualChange}
             />
             <RoutingVisualManager
                 config={visualConfig ?? visualDocument.rawSnapshot}
                 coreType={visualDocument.coreType}
                 document={visualDocument}
-                onConfigChange={(nextConfig, description) => {
-                    setVisualConfig(nextConfig)
-                    setVisualDocument(parseConfigProfile(nextConfig, coreType))
-                    setVisualChangeDescription(description)
-                    setHasUnsavedChanges(JSON.stringify(nextConfig, null, 2) !== originalValue)
-                }}
+                onConfigChange={handleVisualChange}
             />
             <DnsVisualManager
                 config={visualConfig ?? visualDocument.rawSnapshot}
                 coreType={visualDocument.coreType}
                 document={visualDocument}
-                onConfigChange={(nextConfig, description) => {
-                    setVisualConfig(nextConfig)
-                    setVisualDocument(parseConfigProfile(nextConfig, coreType))
-                    setVisualChangeDescription(description)
-                    setHasUnsavedChanges(JSON.stringify(nextConfig, null, 2) !== originalValue)
-                }}
+                onConfigChange={handleVisualChange}
             />
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 {renderSummary(t('visual-config-builder.dns-servers'), visualDocument.dns)}
@@ -439,6 +501,7 @@ export function ConfigEditorWidget(props: IProps) {
                         style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
                     >
                         <SegmentedControl
+                            disabled={isVisualSaving}
                             data={[
                                 { label: t('visual-config-builder.visual'), value: 'visual' },
                                 { label: t('visual-config-builder.json'), value: 'json' }
@@ -468,7 +531,9 @@ export function ConfigEditorWidget(props: IProps) {
                             </Button>
                         </Stack>
                     ) : (
-                        visualOverview
+                        <fieldset className={styles.visualFieldset} disabled={isVisualSaving}>
+                            {visualOverview}
+                        </fieldset>
                     )
                 ) : (
                     <>
@@ -530,15 +595,51 @@ export function ConfigEditorWidget(props: IProps) {
 
             {!isFullscreen && mode === 'visual' && (
                 <EditorFooter className={styles.visualFooter} ref={footerRef}>
-                    <Group justify="space-between" style={{ width: '100%' }}>
-                        <Text c="dimmed" size="sm">
-                            {visualChangeDescription ||
-                                t('visual-config-builder.no-pending-changes')}
-                        </Text>
-                        <Button onClick={() => handleModeChange('json')} variant="light">
-                            {t('visual-config-builder.review-json')}
-                        </Button>
-                    </Group>
+                    <Stack gap="xs" style={{ width: '100%' }}>
+                        {statusBar}
+                        <Group justify="space-between">
+                            <Text c="dimmed" size="sm">
+                                {visualChangeDescription ||
+                                    t(
+                                        hasUnsavedChanges
+                                            ? 'config-editor.widget.unsaved-changes'
+                                            : 'visual-config-builder.no-pending-changes'
+                                    )}
+                            </Text>
+                            <Group>
+                                <Button
+                                    disabled={isVisualSaving}
+                                    onClick={() => handleModeChange('json')}
+                                    variant="light"
+                                >
+                                    {t('visual-config-builder.review-json')}
+                                </Button>
+                                <ConfigEditorActionsFeature
+                                    saveOnly
+                                    saveDisabled={
+                                        !isSchemaReady ||
+                                        !visualConfig ||
+                                        !!visualError ||
+                                        (coreType === 'xray' && (isWasmCrashed || isWasmRestarting))
+                                    }
+                                    configProfile={configProfile}
+                                    coreType={coreType}
+                                    editorRef={editorRef}
+                                    getSaveValue={() => JSON.stringify(visualConfig, null, 2)}
+                                    validateBeforeSave={validateVisualValue}
+                                    onSaved={handleSavedValue}
+                                    onSavingChange={setIsVisualSaving}
+                                    hasUnsavedChanges={hasUnsavedChanges}
+                                    isConfigValid={isConfigValid}
+                                    originalValue={originalValue}
+                                    setHasUnsavedChanges={setHasUnsavedChanges}
+                                    setIsConfigValid={setIsConfigValid}
+                                    setOriginalValue={setOriginalValue}
+                                    setResult={setResult}
+                                />
+                            </Group>
+                        </Group>
+                    </Stack>
                 </EditorFooter>
             )}
 
@@ -552,6 +653,7 @@ export function ConfigEditorWidget(props: IProps) {
                     />
 
                     <ConfigEditorActionsFeature
+                        onSaved={handleSavedValue}
                         configProfile={configProfile}
                         coreType={coreType}
                         editorRef={editorRef}

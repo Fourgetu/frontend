@@ -1,9 +1,12 @@
+import { EditUserRouteModal } from '@features/dashboard/speed-limits/components/edit-user-route-modal'
 import {
     bytesPerSecondToMbps,
     getGostForwardNetwork,
     isHostCompatibleWithUserRoute,
     isLoopbackAddress,
+    isPublicInboundCompatibilityAvailable,
     isUserRouteFormReady,
+    resolveGostTargetAddress,
     resolveInboundListenAddress,
     mbpsToBytesPerSecond
 } from '@features/dashboard/speed-limits/model/speed-limit'
@@ -126,6 +129,7 @@ export function SpeedLimitsPage() {
     const [routeModalOpened, routeModal] = useDisclosure(false)
     const [hoppingModalOpened, hoppingModal] = useDisclosure(false)
     const [editingSpeed, setEditingSpeed] = useState<SpeedLimit | null>(null)
+    const [editingRoute, setEditingRoute] = useState<UserRoute | null>(null)
     const [speedName, setSpeedName] = useState('')
     const [downloadMbps, setDownloadMbps] = useState(20)
     const [uploadMbps, setUploadMbps] = useState(20)
@@ -139,6 +143,7 @@ export function SpeedLimitsPage() {
     const [externalPort, setExternalPort] = useState<number | string>('')
     const [network, setNetwork] = useState<'tcp' | 'udp'>('tcp')
     const [safetyConfirmed, setSafetyConfirmed] = useState(false)
+    const [allowPublicInbound, setAllowPublicInbound] = useState(false)
     const [portHoppingConfigUuid, setPortHoppingConfigUuid] = useState<string | null>(null)
 
     const [editingHopping, setEditingHopping] = useState<PortHoppingConfig | null>(null)
@@ -162,6 +167,9 @@ export function SpeedLimitsPage() {
         [hosts]
     )
     const profiles = profilesResponse?.configProfiles
+    const editingInbound = profiles
+        ?.flatMap((profile) => profile.inbounds)
+        .find((inbound) => inbound.uuid === editingRoute?.configProfileInboundUuid)
     const selectedNode = nodes?.find((node) => node.uuid === nodeUuid)
     const selectedNodeProfiles = profiles?.filter(
         (profile) =>
@@ -205,6 +213,16 @@ export function SpeedLimitsPage() {
         selectedInbound?.tag ?? ''
     )
     const inboundIsLoopback = isLoopbackAddress(internalAddress)
+    const publicCompatibilityAvailable = isPublicInboundCompatibilityAvailable(
+        selectedInbound?.coreType,
+        internalAddress
+    )
+    const usePublicCompatibility = publicCompatibilityAvailable && allowPublicInbound
+    const gostTargetAddress = resolveGostTargetAddress(
+        internalAddress,
+        selectedInbound?.coreType,
+        usePublicCompatibility
+    )
     const routeFormReady = isUserRouteFormReady({
         userId,
         nodeUuid,
@@ -215,7 +233,9 @@ export function SpeedLimitsPage() {
         internalAddress,
         externalPort,
         portHoppingConfigUuid,
-        safetyConfirmed
+        safetyConfirmed,
+        coreType: selectedInbound?.coreType,
+        allowPublicInbound: usePublicCompatibility
     })
     const hoppingInboundOptions = useMemo(() => {
         const options = new Map<string, { label: string; value: string }>()
@@ -341,10 +361,11 @@ export function SpeedLimitsPage() {
         setExternalPort('')
         setNetwork('tcp')
         setSafetyConfirmed(false)
+        setAllowPublicInbound(false)
     }
 
     const saveRoute = () => {
-        if (!isLoopbackAddress(internalAddress) || !safetyConfirmed) {
+        if (!gostTargetAddress || !safetyConfirmed) {
             notifications.show({
                 color: 'red',
                 title: t('speed-limits.notifications.loopback-required-title'),
@@ -372,7 +393,8 @@ export function SpeedLimitsPage() {
                 speedLimitUuid: speedLimitUuid || null,
                 portHoppingConfigUuid: portHoppingConfigUuid || null,
                 ...(typeof externalPort === 'number' ? { externalPort } : {}),
-                internalAddress,
+                ...(usePublicCompatibility ? { allowPublicInbound: true } : {}),
+                internalAddress: gostTargetAddress,
                 internalPort: selectedInbound.port,
                 network,
                 enabled: true
@@ -581,6 +603,13 @@ export function SpeedLimitsPage() {
                                         </Table.Td>
                                         <Table.Td>
                                             <Group gap={2} justify="flex-end" wrap="nowrap">
+                                                <Button
+                                                    onClick={() => setEditingRoute(route)}
+                                                    size="xs"
+                                                    variant="subtle"
+                                                >
+                                                    {t('common.action.edit')}
+                                                </Button>
                                                 <Tooltip
                                                     label={t('speed-limits.routes.reallocate-port')}
                                                 >
@@ -704,6 +733,26 @@ export function SpeedLimitsPage() {
                 </Table.ScrollContainer>
             </Card>
 
+            {editingRoute && (
+                <EditUserRouteModal
+                    context={{
+                        user:
+                            userMap.get(editingRoute.userId) ??
+                            t('speed-limits.routes.user-fallback', { id: editingRoute.userId }),
+                        node: nodeMap.get(editingRoute.nodeUuid) ?? editingRoute.nodeUuid,
+                        inbound: editingInbound
+                            ? `${editingInbound.tag} · ${editingInbound.type}`
+                            : editingRoute.configProfileInboundUuid,
+                        host: hostMap.get(editingRoute.hostUuid) ?? editingRoute.hostUuid
+                    }}
+                    hoppingConfigs={hoppingConfigs ?? []}
+                    key={editingRoute.uuid}
+                    onClose={() => setEditingRoute(null)}
+                    route={editingRoute}
+                    speedLimits={speedLimits ?? []}
+                />
+            )}
+
             <Modal
                 onClose={speedModal.close}
                 opened={speedModalOpened}
@@ -776,6 +825,8 @@ export function SpeedLimitsPage() {
                             setInboundUuid(null)
                             setHostUuid(null)
                             setPortHoppingConfigUuid(null)
+                            setAllowPublicInbound(false)
+                            setSafetyConfirmed(false)
                         }}
                         required
                         searchable
@@ -788,14 +839,31 @@ export function SpeedLimitsPage() {
                             setInboundUuid(value)
                             setHostUuid(null)
                             setPortHoppingConfigUuid(null)
+                            setAllowPublicInbound(false)
+                            setSafetyConfirmed(false)
                             const inbound = selectedNodeInbounds.find((item) => item.uuid === value)
                             setNetwork(getGostForwardNetwork(inbound?.type ?? ''))
                         }}
                         required
                         value={inboundUuid}
                     />
-                    {selectedInbound && !inboundIsLoopback && (
+                    {selectedInbound && !inboundIsLoopback && !publicCompatibilityAvailable && (
                         <Alert color="red">{t('speed-limits.routes.public-inbound-warning')}</Alert>
+                    )}
+                    {publicCompatibilityAvailable && (
+                        <Stack gap="xs">
+                            <Switch
+                                checked={allowPublicInbound}
+                                label={t('speed-limits.routes.public-compatibility')}
+                                onChange={(event) => {
+                                    setAllowPublicInbound(event.currentTarget.checked)
+                                    setSafetyConfirmed(false)
+                                }}
+                            />
+                            <Alert color="yellow">
+                                {t('speed-limits.routes.public-compatibility-warning')}
+                            </Alert>
+                        </Stack>
                     )}
                     <Select
                         data={hostOptions}
@@ -855,7 +923,11 @@ export function SpeedLimitsPage() {
                     </SimpleGrid>
                     <Checkbox
                         checked={safetyConfirmed}
-                        label={t('speed-limits.routes.safety-confirmation')}
+                        label={t(
+                            usePublicCompatibility
+                                ? 'speed-limits.routes.public-compatibility-confirmation'
+                                : 'speed-limits.routes.safety-confirmation'
+                        )}
                         onChange={(event) => setSafetyConfirmed(event.currentTarget.checked)}
                     />
                     <Button

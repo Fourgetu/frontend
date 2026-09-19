@@ -3,9 +3,11 @@ import type { QueryClient } from '@tanstack/react-query'
 type TranslationKey =
     | 'speed-limits.api.create-route-error'
     | 'speed-limits.api.create-route-unknown-error'
+    | 'speed-limits.api.update-route-error'
     | 'speed-limits.api.runtime-sync-failed'
     | 'speed-limits.api.runtime-confirmed'
     | 'speed-limits.api.route-created'
+    | 'speed-limits.api.route-updated'
 
 interface RouteNotification {
     color: 'red' | 'teal'
@@ -14,6 +16,7 @@ interface RouteNotification {
 }
 
 interface RouteMutationFeedback {
+    operation?: 'create' | 'update'
     invalidateRoutes: (
         data: unknown,
         variables: unknown,
@@ -38,6 +41,7 @@ const isRuntimeSyncError = (error: unknown): boolean => {
 }
 
 export const createUserRouteMutationCallbacks = ({
+    operation = 'create',
     invalidateRoutes,
     notify,
     translate
@@ -47,13 +51,21 @@ export const createUserRouteMutationCallbacks = ({
         notify({
             color: 'teal',
             title: translate('speed-limits.api.runtime-confirmed'),
-            message: translate('speed-limits.api.route-created')
+            message: translate(
+                operation === 'update'
+                    ? 'speed-limits.api.route-updated'
+                    : 'speed-limits.api.route-created'
+            )
         })
     },
     onError: (error: unknown) => {
         notify({
             color: 'red',
-            title: translate('speed-limits.api.create-route-error'),
+            title: translate(
+                operation === 'update'
+                    ? 'speed-limits.api.update-route-error'
+                    : 'speed-limits.api.create-route-error'
+            ),
             message: translate(
                 isRuntimeSyncError(error)
                     ? 'speed-limits.api.runtime-sync-failed'

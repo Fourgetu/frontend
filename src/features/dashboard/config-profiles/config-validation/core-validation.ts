@@ -6,6 +6,20 @@ export const CORE_TYPE_MISSING_MESSAGE =
 export const isConfigProfileCoreType = (value: unknown): value is ConfigProfileCoreType =>
     value === 'xray' || value === 'singbox'
 
+// A missing static asset can be served as the SPA's index.html with HTTP 200.
+// Never treat that (or an error document/empty object) as a loaded core schema.
+export const isUsableCoreSchema = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const schema = value as Record<string, unknown>
+    return (
+        schema.type === 'object' ||
+        typeof schema.$ref === 'string' ||
+        (schema.properties !== null &&
+            typeof schema.properties === 'object' &&
+            !Array.isArray(schema.properties))
+    )
+}
+
 export const preserveKnownCoreType = <Profile extends object>(
     currentCoreType: ConfigProfileCoreType,
     profile: Profile & { coreType?: unknown }

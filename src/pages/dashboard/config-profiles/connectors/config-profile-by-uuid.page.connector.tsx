@@ -10,7 +10,9 @@ import { fetchWithProgress } from '@shared/utils/fetch-with-progress'
 
 import { ConfigProfileByUuidPageComponent } from '../components/config-profile-by-uuid.page.component'
 
-export function ConfigProfileByUuidPageConnector() {
+export function ConfigProfileByUuidPageConnector({
+    initialMode = 'json'
+}: { initialMode?: 'json' | 'visual' } = {}) {
     const { uuid } = useParams()
 
     const [downloadProgress, setDownloadProgress] = useState(0)
@@ -129,6 +131,8 @@ export function ConfigProfileByUuidPageConnector() {
 
     return (
         <ConfigProfileByUuidPageComponent
+            key={`${configProfile.uuid}:${initialMode}`}
+            initialMode={initialMode}
             configProfile={configProfile}
             isWasmCrashed={isWasmCrashed}
             isWasmRestarting={isWasmRestarting}

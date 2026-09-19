@@ -15,6 +15,21 @@ export const bytesPerSecondToMbps = (value: number): number => {
 export const isLoopbackAddress = (value: unknown): value is '127.0.0.1' | '::1' =>
     value === '127.0.0.1' || value === '::1'
 
+export const isPublicInboundCompatibilityAvailable = (coreType: unknown, listen: unknown) =>
+    coreType === 'xray' && listen === '0.0.0.0'
+
+export const resolveGostTargetAddress = (
+    listen: unknown,
+    coreType: unknown,
+    allowPublicInbound = false
+): '127.0.0.1' | '::1' | undefined => {
+    if (isLoopbackAddress(listen)) return listen
+    if (allowPublicInbound && isPublicInboundCompatibilityAvailable(coreType, listen)) {
+        return '127.0.0.1'
+    }
+    return undefined
+}
+
 export const getGostForwardNetwork = (inboundType: string): 'tcp' | 'udp' =>
     inboundType.toLowerCase().includes('hysteria') ? 'udp' : 'tcp'
 
@@ -50,6 +65,8 @@ interface UserRouteFormState {
     externalPort: number | string
     portHoppingConfigUuid: string | null
     safetyConfirmed: boolean
+    coreType?: unknown
+    allowPublicInbound?: boolean
 }
 
 export const isHostCompatibleWithUserRoute = (
@@ -96,7 +113,9 @@ export const isUserRouteFormReady = ({
     selectedHost,
     internalAddress,
     externalPort,
-    safetyConfirmed
+    safetyConfirmed,
+    coreType,
+    allowPublicInbound
 }: UserRouteFormState): boolean =>
     Boolean(
         userId &&
@@ -107,7 +126,7 @@ export const isUserRouteFormReady = ({
         selectedInbound.port !== null &&
         selectedHost?.uuid === hostUuid &&
         isHostCompatibleWithUserRoute(selectedHost, nodeUuid, selectedInbound) &&
-        isLoopbackAddress(internalAddress) &&
+        resolveGostTargetAddress(internalAddress, coreType, allowPublicInbound) &&
         isExternalPortValid(externalPort) &&
         safetyConfirmed
     )

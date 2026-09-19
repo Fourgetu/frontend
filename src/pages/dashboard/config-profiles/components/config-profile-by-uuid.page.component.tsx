@@ -14,6 +14,7 @@ import { Page } from '@shared/ui/page'
 import { PageHeaderShared } from '@shared/ui/page-header/page-header.shared'
 
 interface Props {
+    initialMode?: 'json' | 'visual'
     configProfile: ConfigProfileWithCoreType
     isWasmCrashed: boolean
     isWasmRestarting: boolean
@@ -70,10 +71,15 @@ export const ConfigProfileByUuidPageComponent = (props: Props) => {
                     }
                     description={configProfile.uuid}
                     icon={<TbFile size={24} />}
-                    title={configProfile.name}
+                    title={
+                        props.initialMode === 'visual'
+                            ? `${configProfile.name} · ${t('visual-config-builder.visual')}`
+                            : configProfile.name
+                    }
                 />
 
                 <ConfigEditorWidget
+                    initialMode={props.initialMode}
                     configProfile={configProfile}
                     isWasmCrashed={isWasmCrashed}
                     isWasmRestarting={isWasmRestarting}
