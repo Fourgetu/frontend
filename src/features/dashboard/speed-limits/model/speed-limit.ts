@@ -17,3 +17,25 @@ export const isLoopbackAddress = (value: unknown): value is '127.0.0.1' | '::1' 
 
 export const getGostForwardNetwork = (inboundType: string): 'tcp' | 'udp' =>
     inboundType.toLowerCase().includes('hysteria') ? 'udp' : 'tcp'
+
+interface HostRouteCandidate {
+    inbound: {
+        configProfileInboundUuid: string | null
+        configProfileUuid: string | null
+    }
+    nodes: string[]
+}
+
+interface SelectedRouteInbound {
+    profileUuid: string
+    uuid: string
+}
+
+export const isHostCompatibleWithUserRoute = (
+    host: HostRouteCandidate,
+    nodeUuid: string,
+    inbound: SelectedRouteInbound
+): boolean =>
+    host.inbound.configProfileUuid === inbound.profileUuid &&
+    host.inbound.configProfileInboundUuid === inbound.uuid &&
+    (host.nodes.length === 0 || host.nodes.includes(nodeUuid))

@@ -1,6 +1,7 @@
 import {
     bytesPerSecondToMbps,
     getGostForwardNetwork,
+    isHostCompatibleWithUserRoute,
     isLoopbackAddress,
     mbpsToBytesPerSecond
 } from '@features/dashboard/speed-limits/model/speed-limit'
@@ -169,7 +170,8 @@ export function SpeedLimitsPage() {
         selectedNodeProfiles?.flatMap((profile) =>
             profile.inbounds.map((inbound) => ({
                 ...inbound,
-                coreType: profile.coreType
+                coreType: profile.coreType,
+                profileUuid: profile.uuid
             }))
         ) ?? []
     const selectedInbound = selectedNodeInbounds.find((inbound) => inbound.uuid === inboundUuid)
@@ -184,8 +186,8 @@ export function SpeedLimitsPage() {
             ?.filter(
                 (host) =>
                     nodeUuid &&
-                    host.nodes.includes(nodeUuid) &&
-                    host.inbound.configProfileInboundUuid === inboundUuid
+                    selectedInbound &&
+                    isHostCompatibleWithUserRoute(host, nodeUuid, selectedInbound)
             )
             .map((host) => ({
                 label: `${host.remark} · ${host.address}:${host.port}`,
