@@ -31,6 +31,27 @@ interface SelectedRouteInbound {
     uuid: string
 }
 
+interface UserRouteInbound extends SelectedRouteInbound {
+    port: number | null
+}
+
+interface UserRouteHost extends HostRouteCandidate {
+    uuid: string
+}
+
+interface UserRouteFormState {
+    userId: string | null
+    nodeUuid: string | null
+    inboundUuid: string | null
+    hostUuid: string | null
+    selectedInbound: UserRouteInbound | undefined
+    selectedHost: UserRouteHost | undefined
+    internalAddress: unknown
+    externalPort: number | string
+    portHoppingConfigUuid: string | null
+    safetyConfirmed: boolean
+}
+
 export const isHostCompatibleWithUserRoute = (
     host: HostRouteCandidate,
     nodeUuid: string,
@@ -39,3 +60,54 @@ export const isHostCompatibleWithUserRoute = (
     host.inbound.configProfileUuid === inbound.profileUuid &&
     host.inbound.configProfileInboundUuid === inbound.uuid &&
     (host.nodes.length === 0 || host.nodes.includes(nodeUuid))
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : undefined
+
+export const resolveInboundListenAddress = (
+    rawInbound: unknown,
+    profileConfig: unknown,
+    inboundTag: string
+): unknown => {
+    const rawListen = asRecord(rawInbound)?.listen
+    if (rawListen !== undefined) return rawListen
+
+    const inbounds = asRecord(profileConfig)?.inbounds
+    if (!Array.isArray(inbounds)) return undefined
+
+    return inbounds.map(asRecord).find((inbound) => inbound?.tag === inboundTag)?.listen
+}
+
+export const isExternalPortValid = (externalPort: number | string): boolean =>
+    externalPort === '' ||
+    (typeof externalPort === 'number' &&
+        Number.isInteger(externalPort) &&
+        externalPort >= 1 &&
+        externalPort <= 65_535)
+
+export const isUserRouteFormReady = ({
+    userId,
+    nodeUuid,
+    inboundUuid,
+    hostUuid,
+    selectedInbound,
+    selectedHost,
+    internalAddress,
+    externalPort,
+    safetyConfirmed
+}: UserRouteFormState): boolean =>
+    Boolean(
+        userId &&
+        nodeUuid &&
+        inboundUuid &&
+        hostUuid &&
+        selectedInbound?.uuid === inboundUuid &&
+        selectedInbound.port !== null &&
+        selectedHost?.uuid === hostUuid &&
+        isHostCompatibleWithUserRoute(selectedHost, nodeUuid, selectedInbound) &&
+        isLoopbackAddress(internalAddress) &&
+        isExternalPortValid(externalPort) &&
+        safetyConfirmed
+    )

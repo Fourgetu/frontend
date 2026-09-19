@@ -5,7 +5,10 @@ import {
     bytesPerSecondToMbps,
     getGostForwardNetwork,
     isHostCompatibleWithUserRoute,
+    isExternalPortValid,
     isLoopbackAddress,
+    isUserRouteFormReady,
+    resolveInboundListenAddress,
     mbpsToBytesPerSecond
 } from './speed-limit.ts'
 
@@ -98,5 +101,95 @@ test('does not mix hosts across nodes, inbounds, profiles, or cores', () => {
             { profileUuid: SINGBOX_PROFILE_UUID, uuid: SINGBOX_INBOUND_UUID }
         ),
         false
+    )
+})
+
+const selectedSingBoxInbound = {
+    profileUuid: SINGBOX_PROFILE_UUID,
+    uuid: SINGBOX_INBOUND_UUID,
+    port: 35_579
+}
+const compatibleSingBoxHost = {
+    uuid: '00000000-0000-4000-8000-000000000007',
+    ...host(SINGBOX_PROFILE_UUID, SINGBOX_INBOUND_UUID)
+}
+const readyRouteForm = {
+    userId: '6',
+    nodeUuid: VMRACK_NODE_UUID,
+    inboundUuid: SINGBOX_INBOUND_UUID,
+    hostUuid: compatibleSingBoxHost.uuid,
+    selectedInbound: selectedSingBoxInbound,
+    selectedHost: compatibleSingBoxHost,
+    internalAddress: '127.0.0.1',
+    externalPort: '',
+    portHoppingConfigUuid: null,
+    safetyConfirmed: true
+}
+
+test('enables sing-box Hysteria2 route with an unrestricted host and automatic port', () => {
+    assert.equal(isUserRouteFormReady(readyRouteForm), true)
+    assert.equal(isExternalPortValid(''), true)
+})
+
+test('enables a standard Hysteria2 route with a valid manual external port', () => {
+    assert.equal(isUserRouteFormReady({ ...readyRouteForm, externalPort: 32_123 }), true)
+})
+
+test('port hopping is optional and does not participate in base route readiness', () => {
+    assert.equal(isUserRouteFormReady(readyRouteForm), true)
+    assert.equal(
+        isUserRouteFormReady({
+            ...readyRouteForm,
+            portHoppingConfigUuid: '00000000-0000-4000-8000-000000000008'
+        }),
+        true
+    )
+})
+
+test('disables route submission without a host or confirmation', () => {
+    assert.equal(
+        isUserRouteFormReady({ ...readyRouteForm, hostUuid: null, selectedHost: undefined }),
+        false
+    )
+    assert.equal(isUserRouteFormReady({ ...readyRouteForm, safetyConfirmed: false }), false)
+})
+
+test('disables route submission for an incompatible host', () => {
+    assert.equal(
+        isUserRouteFormReady({
+            ...readyRouteForm,
+            selectedHost: {
+                ...compatibleSingBoxHost,
+                nodes: [OTHER_NODE_UUID]
+            }
+        }),
+        false
+    )
+})
+
+test('accepts empty automatic port but rejects incomplete or invalid manual ports', () => {
+    assert.equal(isExternalPortValid(''), true)
+    assert.equal(isExternalPortValid('320'), false)
+    assert.equal(isExternalPortValid(0), false)
+    assert.equal(isExternalPortValid(65_536), false)
+})
+
+test('resolves sing-box listen address from profile config when list rawInbound omits it', () => {
+    assert.equal(
+        resolveInboundListenAddress(
+            { type: 'hysteria2', tag: 'singbox-hysteria2-7jiv3', listen_port: 35_579 },
+            {
+                inbounds: [
+                    {
+                        type: 'hysteria2',
+                        tag: 'singbox-hysteria2-7jiv3',
+                        listen: '127.0.0.1',
+                        listen_port: 35_579
+                    }
+                ]
+            },
+            'singbox-hysteria2-7jiv3'
+        ),
+        '127.0.0.1'
     )
 })

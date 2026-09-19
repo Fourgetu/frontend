@@ -3,6 +3,8 @@ import {
     getGostForwardNetwork,
     isHostCompatibleWithUserRoute,
     isLoopbackAddress,
+    isUserRouteFormReady,
+    resolveInboundListenAddress,
     mbpsToBytesPerSecond
 } from '@features/dashboard/speed-limits/model/speed-limit'
 import {
@@ -175,6 +177,9 @@ export function SpeedLimitsPage() {
             }))
         ) ?? []
     const selectedInbound = selectedNodeInbounds.find((inbound) => inbound.uuid === inboundUuid)
+    const selectedProfile = selectedNodeProfiles?.find(
+        (profile) => profile.uuid === selectedInbound?.profileUuid
+    )
     const inboundOptions = selectedNodeInbounds
         .filter((inbound) => inbound.port !== null)
         .map((inbound) => ({
@@ -193,8 +198,25 @@ export function SpeedLimitsPage() {
                 label: `${host.remark} · ${host.address}:${host.port}`,
                 value: host.uuid
             })) ?? []
-    const rawInbound = selectedInbound?.rawInbound as { listen?: unknown } | null | undefined
-    const inboundIsLoopback = isLoopbackAddress(rawInbound?.listen)
+    const selectedHost = hosts?.find((host) => host.uuid === hostUuid)
+    const internalAddress = resolveInboundListenAddress(
+        selectedInbound?.rawInbound,
+        selectedProfile?.config,
+        selectedInbound?.tag ?? ''
+    )
+    const inboundIsLoopback = isLoopbackAddress(internalAddress)
+    const routeFormReady = isUserRouteFormReady({
+        userId,
+        nodeUuid,
+        inboundUuid,
+        hostUuid,
+        selectedInbound,
+        selectedHost,
+        internalAddress,
+        externalPort,
+        portHoppingConfigUuid,
+        safetyConfirmed
+    })
     const hoppingInboundOptions = useMemo(() => {
         const options = new Map<string, { label: string; value: string }>()
         for (const node of nodes ?? []) {
@@ -322,13 +344,22 @@ export function SpeedLimitsPage() {
     }
 
     const saveRoute = () => {
-        if (!userId || !nodeUuid || !inboundUuid || !hostUuid || !selectedInbound?.port) return
-        if (!inboundIsLoopback || !safetyConfirmed) {
+        if (!isLoopbackAddress(internalAddress) || !safetyConfirmed) {
             notifications.show({
                 color: 'red',
                 title: t('speed-limits.notifications.loopback-required-title'),
                 message: t('speed-limits.notifications.loopback-required-message')
             })
+            return
+        }
+        if (
+            !routeFormReady ||
+            !userId ||
+            !nodeUuid ||
+            !inboundUuid ||
+            !hostUuid ||
+            !selectedInbound?.port
+        ) {
             return
         }
 
@@ -341,7 +372,7 @@ export function SpeedLimitsPage() {
                 speedLimitUuid: speedLimitUuid || null,
                 portHoppingConfigUuid: portHoppingConfigUuid || null,
                 ...(typeof externalPort === 'number' ? { externalPort } : {}),
-                internalAddress: rawInbound.listen as '127.0.0.1' | '::1',
+                internalAddress,
                 internalPort: selectedInbound.port,
                 network,
                 enabled: true
@@ -828,7 +859,7 @@ export function SpeedLimitsPage() {
                         onChange={(event) => setSafetyConfirmed(event.currentTarget.checked)}
                     />
                     <Button
-                        disabled={!inboundIsLoopback || !safetyConfirmed}
+                        disabled={!routeFormReady || createRoute.isPending}
                         loading={createRoute.isPending}
                         onClick={saveRoute}
                     >
