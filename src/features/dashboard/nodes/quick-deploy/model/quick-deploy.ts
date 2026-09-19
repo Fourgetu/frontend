@@ -1,5 +1,7 @@
 import type { CreateHostCommand } from '@remnawave/backend-contract'
 
+import type { CertificateSource } from '@shared/tls'
+
 import {
     appendProtocolPresets,
     PROTOCOL_PRESETS,
@@ -98,6 +100,7 @@ export interface QuickDeployParameters {
         certificateFile: string
         domain: string
         keyFile: string
+        source?: CertificateSource
     }
 }
 

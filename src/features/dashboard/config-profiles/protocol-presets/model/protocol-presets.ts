@@ -1,3 +1,5 @@
+import type { CertificateSource } from '../../../../../shared/tls'
+
 import { generateX25519 } from '../../../../../shared/utils/crypto/keypair-utils.ts'
 import {
     normalizeRealityMinClientVersion,
@@ -41,6 +43,7 @@ export interface TlsPresetOptions {
     certificateFile: string
     domain: string
     keyFile: string
+    source?: CertificateSource
 }
 
 export interface RealityPresetOptions {
@@ -472,15 +475,17 @@ const buildMixedPreset = (
 })
 
 export const validateTlsPresetOptions = (tls?: TlsPresetOptions): string[] => {
-    if (!tls) return ['domain', 'certificateFile', 'keyFile']
+    if (!tls) return ['domain']
 
     const invalid: string[] = []
     const domain = tls.domain.trim()
     const domainPattern = /^(?=.{1,253}$)(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z]{2,63}$/i
 
     if (!domain || !domainPattern.test(domain)) invalid.push('domain')
-    if (!tls.certificateFile.trim()) invalid.push('certificateFile')
-    if (!tls.keyFile.trim()) invalid.push('keyFile')
+    if (tls.source !== 'panel') {
+        if (!tls.certificateFile.trim()) invalid.push('certificateFile')
+        if (!tls.keyFile.trim()) invalid.push('keyFile')
+    }
 
     return invalid
 }

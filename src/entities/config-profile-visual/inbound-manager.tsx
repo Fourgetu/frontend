@@ -32,6 +32,9 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TbCopy, TbEdit, TbPlus, TbTrash } from 'react-icons/tb'
 
+import { useGetPanelTlsCertificate } from '@shared/api/hooks'
+import { PANEL_CERTIFICATE_URI, PANEL_PRIVATE_KEY_URI, isPanelCertificatePair } from '@shared/tls'
+
 import {
     applyVisualPatch,
     buildInboundEditorOperations,
@@ -120,6 +123,7 @@ export function InboundVisualManager({
     onConfigChange
 }: InboundManagerProps) {
     const { t } = useTranslation()
+    const { data: panelTlsCertificate } = useGetPanelTlsCertificate()
     const [editorIndex, setEditorIndex] = useState<number | null>(null)
     const [editorOpen, setEditorOpen] = useState(false)
     const [editorDraft, setEditorDraft] = useState<InboundEditorDraft>(() =>
@@ -135,14 +139,21 @@ export function InboundVisualManager({
         targetDomain: 'www.intel.com',
         serverName: 'www.intel.com',
         tlsDomain: '',
-        certificateFile: '/var/lib/remnawave/configs/xray/ssl/fullchain.pem',
-        keyFile: '/var/lib/remnawave/configs/xray/ssl/privkey.key'
+        certificateFile:
+            coreType === 'singbox'
+                ? PANEL_CERTIFICATE_URI
+                : '/var/lib/remnawave/configs/xray/ssl/fullchain.pem',
+        keyFile:
+            coreType === 'singbox'
+                ? PANEL_PRIVATE_KEY_URI
+                : '/var/lib/remnawave/configs/xray/ssl/privkey.key'
     })
 
     const inbounds = useMemo(() => document.inboundDetails, [document.inboundDetails])
     const editorInbound = editorIndex === null ? undefined : inbounds[editorIndex]
     const editorSnippetManaged = editorInbound ? isSnippetManaged(editorInbound) : false
     const editorReferences = editorInbound ? getInboundReferences(config, editorInbound.tag) : []
+
     const localizeError = (error: string) => {
         if (error === 'Inbound tag is required.')
             return t('visual-config-builder.errors.inbound-tag-required')
@@ -166,8 +177,23 @@ export function InboundVisualManager({
 
     const openEditor = (inbound: VisualInbound) => {
         setEditorIndex(inbound.index)
+        const draft = getInboundEditorDraft(
+            inbound.raw,
+            coreType,
+            REALITY_MIN_CLIENT_VERSION_COMPAT
+        )
+        const primaryDomain =
+            coreType === 'singbox' &&
+            panelTlsCertificate?.status === 'ready' &&
+            panelTlsCertificate.primaryDomain
+                ? panelTlsCertificate.primaryDomain
+                : ''
         setEditorDraft(
-            getInboundEditorDraft(inbound.raw, coreType, REALITY_MIN_CLIENT_VERSION_COMPAT)
+            isPanelCertificatePair(draft.certificateFile, draft.keyFile) &&
+                !draft.tlsServerName.trim() &&
+                primaryDomain
+                ? { ...draft, tlsServerName: primaryDomain }
+                : draft
         )
         setEditorOpen(true)
     }
@@ -343,11 +369,23 @@ export function InboundVisualManager({
 
     const openAdd = () => {
         const presetId = getPresetOptions(coreType)[0]?.value ?? ''
+        const primaryDomain =
+            coreType === 'singbox' &&
+            panelTlsCertificate?.status === 'ready' &&
+            panelTlsCertificate.primaryDomain
+                ? panelTlsCertificate.primaryDomain
+                : ''
         setAddDraft((current) => ({
             ...current,
             presetId,
             tag: '',
-            port: ''
+            port: '',
+            tlsDomain:
+                isPanelCertificatePair(current.certificateFile, current.keyFile) &&
+                !current.tlsDomain.trim() &&
+                primaryDomain
+                    ? primaryDomain
+                    : current.tlsDomain
         }))
         setAddOpen(true)
     }
@@ -384,8 +422,9 @@ export function InboundVisualManager({
                     ),
                     tls: {
                         domain: addDraft.tlsDomain,
-                        certificateFile: addDraft.certificateFile,
-                        keyFile: addDraft.keyFile
+                        certificateFile: PANEL_CERTIFICATE_URI,
+                        keyFile: PANEL_PRIVATE_KEY_URI,
+                        source: 'panel'
                     }
                 })
                 next = result.added[0].inbound as unknown as JsonObject
@@ -1001,32 +1040,94 @@ export function InboundVisualManager({
                                                     })
                                                 }
                                             />
-                                            <SimpleGrid cols={2}>
-                                                <TextInput
-                                                    disabled={editorSnippetManaged}
+                                            {coreType === 'singbox' && (
+                                                <Select
                                                     label={t(
-                                                        'visual-config-builder.certificate-file'
+                                                        'visual-config-builder.certificate-source'
                                                     )}
-                                                    value={editorDraft.certificateFile}
-                                                    onChange={(event) =>
+                                                    data={[
+                                                        {
+                                                            value: 'panel',
+                                                            label: t(
+                                                                'visual-config-builder.panel-certificate'
+                                                            )
+                                                        },
+                                                        {
+                                                            value: 'manual',
+                                                            label: t(
+                                                                'visual-config-builder.custom-certificate'
+                                                            )
+                                                        }
+                                                    ]}
+                                                    value={
+                                                        isPanelCertificatePair(
+                                                            editorDraft.certificateFile,
+                                                            editorDraft.keyFile
+                                                        )
+                                                            ? 'panel'
+                                                            : 'manual'
+                                                    }
+                                                    onChange={(value) => {
+                                                        const primaryDomain =
+                                                            panelTlsCertificate?.status === 'ready'
+                                                                ? (panelTlsCertificate.primaryDomain ??
+                                                                  '')
+                                                                : ''
                                                         setEditorDraft({
                                                             ...editorDraft,
                                                             certificateFile:
-                                                                event.currentTarget.value
+                                                                value === 'panel'
+                                                                    ? PANEL_CERTIFICATE_URI
+                                                                    : '',
+                                                            keyFile:
+                                                                value === 'panel'
+                                                                    ? PANEL_PRIVATE_KEY_URI
+                                                                    : '',
+                                                            tlsServerName:
+                                                                value === 'panel' &&
+                                                                !editorDraft.tlsServerName.trim()
+                                                                    ? primaryDomain
+                                                                    : editorDraft.tlsServerName
                                                         })
-                                                    }
+                                                    }}
                                                 />
-                                                <TextInput
-                                                    disabled={editorSnippetManaged}
-                                                    label={t('visual-config-builder.key-file')}
-                                                    value={editorDraft.keyFile}
-                                                    onChange={(event) =>
-                                                        setEditorDraft({
-                                                            ...editorDraft,
-                                                            keyFile: event.currentTarget.value
-                                                        })
-                                                    }
-                                                />
+                                            )}
+                                            <SimpleGrid cols={2}>
+                                                {!isPanelCertificatePair(
+                                                    editorDraft.certificateFile,
+                                                    editorDraft.keyFile
+                                                ) && (
+                                                    <>
+                                                        <TextInput
+                                                            disabled={editorSnippetManaged}
+                                                            label={t(
+                                                                'visual-config-builder.certificate-file'
+                                                            )}
+                                                            value={editorDraft.certificateFile}
+                                                            onChange={(event) =>
+                                                                setEditorDraft({
+                                                                    ...editorDraft,
+                                                                    certificateFile:
+                                                                        event.currentTarget.value
+                                                                })
+                                                            }
+                                                        />
+                                                        <TextInput
+                                                            disabled={editorSnippetManaged}
+                                                            label={t(
+                                                                'visual-config-builder.key-file'
+                                                            )}
+                                                            value={editorDraft.keyFile}
+                                                            onChange={(event) =>
+                                                                setEditorDraft({
+                                                                    ...editorDraft,
+                                                                    keyFile:
+                                                                        event.currentTarget.value
+                                                                })
+                                                            }
+                                                        />
+                                                    </>
+                                                )}
                                                 <TextInput
                                                     disabled={editorSnippetManaged}
                                                     label="minVersion"
@@ -1297,23 +1398,72 @@ export function InboundVisualManager({
                                     })
                                 }
                             />
-                            <TextInput
-                                label={t('visual-config-builder.certificate-file')}
-                                value={addDraft.certificateFile}
-                                onChange={(event) =>
-                                    setAddDraft({
-                                        ...addDraft,
-                                        certificateFile: event.currentTarget.value
-                                    })
-                                }
-                            />
-                            <TextInput
-                                label={t('visual-config-builder.key-file')}
-                                value={addDraft.keyFile}
-                                onChange={(event) =>
-                                    setAddDraft({ ...addDraft, keyFile: event.currentTarget.value })
-                                }
-                            />
+                            {coreType === 'singbox' && (
+                                <Select
+                                    label={t('visual-config-builder.certificate-source')}
+                                    data={[
+                                        {
+                                            value: 'panel',
+                                            label: t('visual-config-builder.panel-certificate')
+                                        },
+                                        {
+                                            value: 'manual',
+                                            label: t('visual-config-builder.custom-certificate')
+                                        }
+                                    ]}
+                                    value={
+                                        isPanelCertificatePair(
+                                            addDraft.certificateFile,
+                                            addDraft.keyFile
+                                        )
+                                            ? 'panel'
+                                            : 'manual'
+                                    }
+                                    onChange={(value) => {
+                                        const primaryDomain =
+                                            panelTlsCertificate?.status === 'ready'
+                                                ? (panelTlsCertificate.primaryDomain ?? '')
+                                                : ''
+                                        setAddDraft({
+                                            ...addDraft,
+                                            certificateFile:
+                                                value === 'panel' ? PANEL_CERTIFICATE_URI : '',
+                                            keyFile: value === 'panel' ? PANEL_PRIVATE_KEY_URI : '',
+                                            tlsDomain:
+                                                value === 'panel' && !addDraft.tlsDomain.trim()
+                                                    ? primaryDomain
+                                                    : addDraft.tlsDomain
+                                        })
+                                    }}
+                                />
+                            )}
+                            {!isPanelCertificatePair(
+                                addDraft.certificateFile,
+                                addDraft.keyFile
+                            ) && (
+                                <>
+                                    <TextInput
+                                        label={t('visual-config-builder.certificate-file')}
+                                        value={addDraft.certificateFile}
+                                        onChange={(event) =>
+                                            setAddDraft({
+                                                ...addDraft,
+                                                certificateFile: event.currentTarget.value
+                                            })
+                                        }
+                                    />
+                                    <TextInput
+                                        label={t('visual-config-builder.key-file')}
+                                        value={addDraft.keyFile}
+                                        onChange={(event) =>
+                                            setAddDraft({
+                                                ...addDraft,
+                                                keyFile: event.currentTarget.value
+                                            })
+                                        }
+                                    />
+                                </>
+                            )}
                         </Stack>
                     )}
                     <Group justify="flex-end">

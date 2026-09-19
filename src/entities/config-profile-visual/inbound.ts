@@ -6,6 +6,10 @@ import {
     type ProtocolPresetId
 } from '../../features/dashboard/config-profiles/protocol-presets/model/protocol-presets.ts'
 import { appendSingBoxProtocolPresets } from '../../features/dashboard/nodes/quick-deploy/model/singbox-protocol-presets.ts'
+import {
+    PANEL_CERTIFICATE_URI,
+    PANEL_PRIVATE_KEY_URI
+} from '../../shared/tls/managed-certificate.ts'
 import { collectInboundReferences } from './references.ts'
 
 const isObject = (value: unknown): value is JsonObject =>
@@ -108,8 +112,9 @@ export const createInboundFromProtocolPreset = (
         reservedPorts: [],
         tls: options.singboxTls ?? {
             domain: '',
-            certificateFile: '',
-            keyFile: ''
+            certificateFile: PANEL_CERTIFICATE_URI,
+            keyFile: PANEL_PRIVATE_KEY_URI,
+            source: 'panel'
         }
     })
     return result.added[0].inbound as unknown as JsonObject

@@ -27,7 +27,7 @@ import {
     ThemeIcon
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TbAlertTriangle, TbArrowLeft, TbArrowRight, TbRocket } from 'react-icons/tb'
 
@@ -38,7 +38,8 @@ import {
     configProfilesQueryKeys,
     useGetConfigProfiles,
     useGetHosts,
-    useGetNodes
+    useGetNodes,
+    useGetPanelTlsCertificate
 } from '@shared/api/hooks'
 import { LoadingScreen } from '@shared/ui'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
@@ -81,7 +82,8 @@ const DEFAULT_PARAMETERS: QuickDeployParameters = {
     tls: {
         domain: '',
         certificateFile: '/var/lib/remnawave/configs/xray/ssl/fullchain.pem',
-        keyFile: '/var/lib/remnawave/configs/xray/ssl/privkey.key'
+        keyFile: '/var/lib/remnawave/configs/xray/ssl/privkey.key',
+        source: 'manual'
     },
     serverDescription: ''
 }
@@ -140,12 +142,28 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
     const { data: nodes, isLoading: nodesLoading } = useGetNodes()
     const { data: profilesResponse, isLoading: profilesLoading } = useGetConfigProfiles()
     const { data: hosts, isLoading: hostsLoading } = useGetHosts()
+    const { data: panelTlsCertificate } = useGetPanelTlsCertificate()
 
     const [activeStep, setActiveStep] = useState(0)
     const [parameters, setParameters] = useState<QuickDeployParameters>(DEFAULT_PARAMETERS)
     const [plan, setPlan] = useState<QuickDeploymentPlan>()
     const [result, setResult] = useState<DeploymentResult>()
     const [isDeploying, setIsDeploying] = useState(false)
+
+    useEffect(() => {
+        if (
+            parameters.coreType === 'singbox' &&
+            parameters.tls.source === 'panel' &&
+            !parameters.tls.domain &&
+            panelTlsCertificate?.status === 'ready' &&
+            panelTlsCertificate.primaryDomain
+        ) {
+            setParameters((current) => ({
+                ...current,
+                tls: { ...current.tls, domain: panelTlsCertificate.primaryDomain! }
+            }))
+        }
+    }, [panelTlsCertificate, parameters.coreType, parameters.tls.domain, parameters.tls.source])
 
     const profiles = profilesResponse?.configProfiles
     const selectedNode = nodes?.find((node) => node.uuid === parameters.nodeUuid)
@@ -256,7 +274,11 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
             ...current,
             coreType,
             profileUuid: nextProfileUuid,
-            presetIds: getRecommendedQuickDeployProtocolIds(coreType)
+            presetIds: getRecommendedQuickDeployProtocolIds(coreType),
+            tls: {
+                ...current.tls,
+                source: coreType === 'singbox' ? 'panel' : 'manual'
+            }
         }))
         setPlan(undefined)
         setResult(undefined)
@@ -736,28 +758,73 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                             required
                                             value={parameters.tls.domain}
                                         />
-                                        <TextInput
-                                            label={t('quick-deploy.certificate-file')}
-                                            onChange={(event) =>
-                                                setParameter('tls', {
-                                                    ...parameters.tls,
-                                                    certificateFile: event.currentTarget.value
-                                                })
-                                            }
-                                            required
-                                            value={parameters.tls.certificateFile}
-                                        />
-                                        <TextInput
-                                            label={t('quick-deploy.key-file')}
-                                            onChange={(event) =>
-                                                setParameter('tls', {
-                                                    ...parameters.tls,
-                                                    keyFile: event.currentTarget.value
-                                                })
-                                            }
-                                            required
-                                            value={parameters.tls.keyFile}
-                                        />
+                                        {parameters.coreType === 'singbox' && (
+                                            <Select
+                                                label={t('quick-deploy.certificate-source')}
+                                                data={[
+                                                    {
+                                                        value: 'panel',
+                                                        label: t('quick-deploy.panel-certificate')
+                                                    },
+                                                    {
+                                                        value: 'manual',
+                                                        label: t('quick-deploy.custom-certificate')
+                                                    }
+                                                ]}
+                                                value={parameters.tls.source ?? 'manual'}
+                                                onChange={(value) =>
+                                                    setParameter('tls', {
+                                                        ...parameters.tls,
+                                                        source:
+                                                            value === 'panel' ? 'panel' : 'manual'
+                                                    })
+                                                }
+                                            />
+                                        )}
+                                        {parameters.tls.source === 'panel' &&
+                                        parameters.coreType === 'singbox' ? (
+                                            <Stack gap="xs">
+                                                <Alert color="blue">
+                                                    {t('quick-deploy.panel-certificate-help')}
+                                                </Alert>
+                                                {panelTlsCertificate && (
+                                                    <Text c="dimmed" size="xs">
+                                                        {panelTlsCertificate.status === 'ready'
+                                                            ? `${panelTlsCertificate.primaryDomain ?? '—'} · ${panelTlsCertificate.notAfter ?? '—'}`
+                                                            : (panelTlsCertificate.statusMessage ??
+                                                              t(
+                                                                  'quick-deploy.panel-certificate-unavailable'
+                                                              ))}
+                                                    </Text>
+                                                )}
+                                            </Stack>
+                                        ) : (
+                                            <>
+                                                <TextInput
+                                                    label={t('quick-deploy.certificate-file')}
+                                                    onChange={(event) =>
+                                                        setParameter('tls', {
+                                                            ...parameters.tls,
+                                                            certificateFile:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                    required
+                                                    value={parameters.tls.certificateFile}
+                                                />
+                                                <TextInput
+                                                    label={t('quick-deploy.key-file')}
+                                                    onChange={(event) =>
+                                                        setParameter('tls', {
+                                                            ...parameters.tls,
+                                                            keyFile: event.currentTarget.value
+                                                        })
+                                                    }
+                                                    required
+                                                    value={parameters.tls.keyFile}
+                                                />
+                                            </>
+                                        )}
                                     </Stack>
                                 </Card>
                             )}

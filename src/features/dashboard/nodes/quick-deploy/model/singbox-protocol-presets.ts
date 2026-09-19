@@ -1,6 +1,11 @@
 import type { TlsPresetOptions } from '../../../config-profiles/protocol-presets/model/protocol-presets.ts'
 import type { QuickDeployProtocolId } from './core-capabilities.ts'
 
+import {
+    PANEL_CERTIFICATE_URI,
+    PANEL_PRIVATE_KEY_URI
+} from '../../../../../shared/tls/managed-certificate.ts'
+
 export interface SingBoxInbound extends Record<string, unknown> {
     listen: string
     listen_port: number
@@ -72,7 +77,10 @@ const nextTag = (prefix: string, usedTags: Set<string>): string => {
 }
 
 const validateTls = (tls: TlsPresetOptions): void => {
-    if (!tls.domain.trim() || !tls.certificateFile.trim() || !tls.keyFile.trim()) {
+    if (
+        !tls.domain.trim() ||
+        (tls.source !== 'panel' && (!tls.certificateFile.trim() || !tls.keyFile.trim()))
+    ) {
         throw new Error('TLS preset fields are invalid: domain, certificateFile, keyFile')
     }
 }
@@ -81,8 +89,8 @@ const tlsConfig = (tls: TlsPresetOptions, alpn: string[]): Record<string, unknow
     enabled: true,
     server_name: tls.domain.trim(),
     alpn,
-    certificate_path: tls.certificateFile.trim(),
-    key_path: tls.keyFile.trim()
+    certificate_path: tls.source === 'panel' ? PANEL_CERTIFICATE_URI : tls.certificateFile.trim(),
+    key_path: tls.source === 'panel' ? PANEL_PRIVATE_KEY_URI : tls.keyFile.trim()
 })
 
 const buildInbound = (

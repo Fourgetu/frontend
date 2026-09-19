@@ -10,6 +10,7 @@ import {
     GetStatsCommand
 } from '@remnawave/backend-contract'
 import { keepPreviousData } from '@tanstack/react-query'
+import { z } from 'zod'
 
 import { getUserTimezoneUtil, sToMs } from '@shared/utils/time-utils'
 
@@ -42,7 +43,35 @@ export const systemQueryKeys = createQueryKeys('system', {
     },
     getHttpStats: {
         queryKey: null
+    },
+    getTlsCertificate: {
+        queryKey: null
     }
+})
+
+const panelTlsCertificateSchema = z.object({
+    response: z.object({
+        id: z.string(),
+        source: z.literal('panel-reverse-proxy'),
+        primaryDomain: z.string().nullable(),
+        sans: z.array(z.string()),
+        fingerprint: z.string().nullable(),
+        notAfter: z.string().nullable(),
+        updatedAt: z.string().nullable(),
+        status: z.enum(['expired', 'invalid', 'ready', 'unconfigured']),
+        statusMessage: z.string().nullable()
+    })
+})
+
+export const useGetPanelTlsCertificate = createGetQueryHook({
+    endpoint: '/api/system/tls-certificate',
+    responseSchema: panelTlsCertificateSchema,
+    getQueryKey: () => systemQueryKeys.getTlsCertificate.queryKey,
+    rQueryParams: {
+        staleTime: sToMs(60),
+        refetchOnMount: true
+    },
+    errorHandler: (error) => errorHandler(error, 'Get Panel TLS Certificate')
 })
 
 export const useGetSystemStats = createGetQueryHook({

@@ -4,6 +4,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    PANEL_CERTIFICATE_URI,
+    PANEL_PRIVATE_KEY_URI
+} from '../../../../../shared/tls/managed-certificate.ts'
+import {
     appendProtocolPresets,
     PROTOCOL_PRESETS,
     type XrayInbound
@@ -665,6 +669,24 @@ test('experimental sing-box builders create authenticated runtime-ready AnyTLS a
     assert.equal(socks.listen, '127.0.0.1')
     assert.deepEqual(socks.users, [])
     assert.notEqual(anyTls.listen_port, socks.listen_port)
+})
+
+test('sing-box TLS presets use managed panel certificate markers when selected', () => {
+    const result = appendSingBoxProtocolPresets(
+        createMinimalSingBoxConfig(),
+        ['singbox-hysteria2'],
+        {
+            tls: {
+                domain: 'panel.example.com',
+                certificateFile: '',
+                keyFile: '',
+                source: 'panel'
+            }
+        }
+    )
+    const tls = result.added[0].inbound.tls as Record<string, unknown>
+    assert.equal(tls.certificate_path, PANEL_CERTIFICATE_URI)
+    assert.equal(tls.key_path, PANEL_PRIVATE_KEY_URI)
 })
 
 test('experimental Xray SOCKS builder requires password auth and loopback GOST mode', () => {
