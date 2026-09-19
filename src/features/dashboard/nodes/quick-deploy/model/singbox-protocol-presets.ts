@@ -116,6 +116,8 @@ const buildInbound = (
             }
         case 'singbox-socks5':
             return { ...common, type: 'socks' }
+        case 'singbox-mixed':
+            return { ...common, type: 'mixed' }
         default:
             throw new Error(`Protocol ${id} does not have a sing-box builder.`)
     }

@@ -24,6 +24,7 @@ export type ProtocolPresetId =
     | 'trojan-tcp-tls'
     | 'vmess-ws-tls'
     | 'hysteria2'
+    | 'mixed'
 
 export interface ProtocolPreset {
     id: ProtocolPresetId
@@ -160,6 +161,16 @@ export const PROTOCOL_PRESETS: readonly ProtocolPreset[] = [
         needsDomain: true,
         needsCertificate: true,
         recommended: true,
+        supported: true
+    },
+    {
+        id: 'mixed',
+        title: 'Mixed',
+        transport: 'SOCKS + HTTP',
+        security: 'None',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: false,
         supported: true
     }
 ] as const
@@ -444,6 +455,22 @@ const buildVmessWsTlsPreset = (
     )
 })
 
+const buildMixedPreset = (
+    preset: ProtocolPreset,
+    usedPorts: Set<number>,
+    usedTags: Set<string>
+): BuiltProtocolPreset => ({
+    preset,
+    inbound: baseInbound(
+        'mixed',
+        'mixed',
+        { auth: 'noauth', udp: true, userLevel: 0 },
+        { network: 'raw', security: 'none', rawSettings: { header: { type: 'none' } } },
+        usedPorts,
+        usedTags
+    )
+})
+
 export const validateTlsPresetOptions = (tls?: TlsPresetOptions): string[] => {
     if (!tls) return ['domain', 'certificateFile', 'keyFile']
 
@@ -514,6 +541,8 @@ const buildPreset = (
             return buildHysteria2Preset(preset, options.tls!, usedPorts, usedTags)
         case 'vmess-ws-tls':
             return buildVmessWsTlsPreset(preset, options.tls!, usedPorts, usedTags)
+        case 'mixed':
+            return buildMixedPreset(preset, usedPorts, usedTags)
     }
 }
 

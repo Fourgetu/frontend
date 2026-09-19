@@ -8,10 +8,10 @@ import {
     Group
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
-import { GetConfigProfilesCommand } from '@remnawave/backend-contract'
 import { githubDarkTheme, JsonEditor } from 'json-edit-react'
 import { PiCheckBold, PiXBold } from 'react-icons/pi'
 
+import type { ConfigProfileListItemWithCoreType } from '@shared/api/types/config-profile.type'
 import { XrayLogo } from '@shared/ui/logos'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
@@ -20,7 +20,7 @@ interface IProps extends AccordionControlProps {
     onSelectAllInbounds: (profileUuid: string) => void
 
     onUnselectAllInbounds: (profileUuid: string) => void
-    profile: GetConfigProfilesCommand.Response['response']['configProfiles'][number]
+    profile: ConfigProfileListItemWithCoreType
 }
 
 export const AccordionControlShared = (props: IProps) => {

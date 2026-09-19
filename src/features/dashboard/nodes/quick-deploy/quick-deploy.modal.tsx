@@ -71,6 +71,7 @@ const DEFAULT_PARAMETERS: QuickDeployParameters = {
     profileUuid: '',
     presetIds: getRecommendedQuickDeployProtocolIds('xray'),
     hostAddress: '',
+    createOptionalHosts: false,
     reality: {
         minClientVer: REALITY_MIN_CLIENT_VERSION_COMPAT,
         serverName: DEFAULT_REALITY_TARGET_DOMAIN,
@@ -175,6 +176,10 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
     )
     const needsTls = selectedPresets.some((preset) => preset.needsCertificate)
     const needsReality = selectedPresets.some((preset) => preset.security === 'Reality')
+    const hasOptionalHosts = selectedPresets.some((preset) => preset.createsHostByDefault === false)
+    const needsHostAddress = selectedPresets.some(
+        (preset) => preset.createsHostByDefault !== false || parameters.createOptionalHosts
+    )
     const existingRealityInbounds = selectedProfile?.inbounds.filter((inbound) => {
         if (!inbound.rawInbound || typeof inbound.rawInbound !== 'object') return false
         const rawInbound = inbound.rawInbound as Record<string, unknown>
@@ -557,9 +562,25 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                 onChange={(event) =>
                                     setParameter('hostAddress', event.currentTarget.value)
                                 }
-                                required
+                                disabled={!needsHostAddress}
+                                required={needsHostAddress}
                                 value={parameters.hostAddress}
                             />
+                            {hasOptionalHosts && (
+                                <Checkbox
+                                    checked={Boolean(parameters.createOptionalHosts)}
+                                    label={t('quick-deploy.create-optional-hosts')}
+                                    description={t(
+                                        'quick-deploy.create-optional-hosts-description'
+                                    )}
+                                    onChange={(event) =>
+                                        setParameter(
+                                            'createOptionalHosts',
+                                            event.currentTarget.checked
+                                        )
+                                    }
+                                />
+                            )}
                             <TextInput
                                 label={t('quick-deploy.server-description')}
                                 maxLength={30}
@@ -832,7 +853,9 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                                     >
                                                         {plan.hosts[index].willCreateHost
                                                             ? t('quick-deploy.create')
-                                                            : t('quick-deploy.skip-existing')}
+                                                            : plan.hosts[index].enabled
+                                                              ? t('quick-deploy.skip-existing')
+                                                              : t('quick-deploy.skip-optional')}
                                                     </Badge>
                                                 </Table.Td>
                                             </Table.Tr>

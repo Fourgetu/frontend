@@ -1,7 +1,6 @@
 import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import { Group, Modal, Progress, Stack, Transition } from '@mantine/core'
 import { useForm, schemaResolver } from '@mantine/form'
-import { CreateNodeCommand } from '@remnawave/backend-contract'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TbCpu } from 'react-icons/tb'
@@ -14,6 +13,10 @@ import {
     useCreateNode,
     useGetNodeSecretKey
 } from '@shared/api/hooks'
+import {
+    ConcurrentCreateNodeRequestBody,
+    ConcurrentCreateNodeRequestBodySchema
+} from '@shared/api/types/concurrent-node.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
 import { CreateNodeStep1Connection } from './create-node-steps/create-node-step-1-connection'
@@ -37,10 +40,10 @@ export const CreateNodeModal = NiceModal.create(() => {
     const [createdNodeUuid, setCreatedNodeUuid] = useState<string>()
     const [selectedPort, setSelectedPort] = useState<number>(2222)
 
-    const form = useForm<CreateNodeCommand.RequestBody>({
+    const form = useForm<ConcurrentCreateNodeRequestBody>({
         name: 'create-node-form',
         mode: 'uncontrolled',
-        validate: schemaResolver(CreateNodeCommand.RequestBodySchema)
+        validate: schemaResolver(ConcurrentCreateNodeRequestBodySchema)
     })
 
     const { mutate: createNode, isPending: isCreateNodePending } = useCreateNode({

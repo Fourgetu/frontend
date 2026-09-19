@@ -231,7 +231,8 @@
       "vless-reality-grpc": "Reality 的 gRPC 方案，随机生成 serviceName，不带 Vision flow。",
       "trojan-tcp-tls": "经典 Trojan TCP TLS，使用已挂载到容器中的证书文件。",
       "vmess-ws-tls": "适用于 CDN 场景的 WebSocket TLS 方案。",
-      "hysteria2": "QUIC/HTTP3 传输，使用 h3 ALPN，并随机生成 Salamander 混淆密码。"
+      "hysteria2": "QUIC/HTTP3 传输，使用 h3 ALPN，并随机生成 Salamander 混淆密码。",
+      "mixed": "SOCKS 与 HTTP 组合监听器，不生成标准客户端分享链接。"
     }
   },
   "quick-deploy": {
@@ -258,6 +259,8 @@
     "unsupported": "暂不支持",
     "vmess-disabled": "VMess WebSocket TLS 继续禁用，因为 Remnawave backend 3.4.x 尚未完整管理其 Host 和订阅输出。",
     "host-address": "公网 Host 地址 / 域名",
+    "create-optional-hosts": "为工具型协议创建 Host",
+    "create-optional-hosts-description": "Mixed 默认不创建订阅 Host；仅在确实需要时启用。",
     "server-description": "服务器说明",
     "reality-settings": "Reality 设置",
     "reality-target-domain": "REALITY 目标域名",
@@ -295,6 +298,7 @@
     "domain-or-sni": "Server Name / SNI",
     "create": "创建",
     "skip-existing": "已存在 · 跳过",
+    "skip-optional": "可选 · 跳过",
     "no-runtime-ack-warning": "Remnawave 会把节点配置更新加入队列，但没有可靠的 Xray runtime ACK。结果只能确认关联已保存和节点当前在线状态，不能确认节点端 Xray 已成功解析配置。",
     "confirm-deploy": "确认部署",
     "back": "返回",
@@ -2319,6 +2323,18 @@
       "outbound-port-range": "出站端口必须介于 1 和 65535 之间。"
     },
     "inbound": {
+      "protocol-tab": "协议",
+      "sniffing": "嗅探",
+      "auth": "认证方式",
+      "username": "用户名",
+      "password": "密码",
+      "managed-protocol-fields": "由 Remnawave 管理的用户凭据保持不变；此处未显示的协议专属字段会保留在 JSON 模式中。",
+      "header-type": "请求头类型",
+      "path": "路径",
+      "transport-core-note": "仅编辑当前 sing-box 入站已定义的传输字段，其他字段保持仅 JSON 可编辑。",
+      "reality-target": "Reality 目标 / 目的地址",
+      "maximum-client-version": "最高客户端版本",
+      "sniff-enabled": "启用嗅探",
       "list-description": "这里只管理内核监听端口。公网 / NAT 转发端口由用户线路单独管理。",
       "empty": "尚未配置入站。",
       "snippet-managed": "入站由 Snippet 管理",
@@ -2341,6 +2357,16 @@
       "add-description": "新入站复用现有协议预设 / 快速部署构建器。NAT 和公网端口不属于此表单。"
     },
     "outbound": {
+      "share-import": "协议链接一键导入",
+      "import": "导入",
+      "import-preview": "导入预览",
+      "confirm-import": "确认导入",
+      "imported": "已导入出站 {{tag}}",
+      "credential": "UUID / 用户名",
+      "password": "密码",
+      "method": "加密方式",
+      "json-warning": "JSON 编辑只会替换当前出站对象；应用前请检查高级字段和未知字段。",
+      "json-placeholder": "粘贴一个完整的出站 JSON 对象",
       "list-description": "这里只管理内核出站对象。路由和订阅引用会受到保护。",
       "empty": "尚未配置出站。",
       "snippet-managed": "出站由 Snippet 管理",
@@ -2372,6 +2398,9 @@
       "credentials-json-only": "代理凭据和高级传输字段仍仅支持 JSON，且不会在此处自动臆造。"
     },
     "routing": {
+      "order-warning": "路由规则按从上到下顺序匹配，第一条命中的规则生效。",
+      "json-warning": "JSON 编辑只会替换当前路由规则，未知字段仍由你完整控制。",
+      "json-invalid": "路由规则 JSON 无效",
       "list-description": "规则顺序与内核数组一致；编辑已有规则使用定向补丁。",
       "empty": "暂无路由规则。",
       "delete-description": "此操作只会删除内核路由规则，不会修改入站、出站或 NAT 配置。",

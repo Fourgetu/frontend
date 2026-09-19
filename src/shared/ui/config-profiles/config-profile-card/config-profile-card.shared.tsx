@@ -46,6 +46,12 @@ export const ConfigProfileCardShared = memo((props: IProps) => {
                     <Text ff="monospace" fw={700} size="md">
                         {profile.name}
                     </Text>
+                    <Badge
+                        color={profile.coreType === 'singbox' ? 'violet' : 'blue'}
+                        variant="light"
+                    >
+                        {profile.coreType === 'singbox' ? 'sing-box' : 'Xray'}
+                    </Badge>
                 </Group>
                 <Group>
                     <Badge

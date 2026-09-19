@@ -50,7 +50,8 @@ const DESCRIPTION_KEYS = {
     'vless-reality-grpc': 'protocol-presets.description.vless-reality-grpc',
     'trojan-tcp-tls': 'protocol-presets.description.trojan-tcp-tls',
     'vmess-ws-tls': 'protocol-presets.description.vmess-ws-tls',
-    hysteria2: 'protocol-presets.description.hysteria2'
+    hysteria2: 'protocol-presets.description.hysteria2',
+    mixed: 'protocol-presets.description.mixed'
 } as const
 
 interface Props {

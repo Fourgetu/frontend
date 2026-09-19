@@ -164,6 +164,17 @@ test('VMess is visible as a compatibility item but cannot create a broken config
     )
 })
 
+test('Mixed quick protocol creates a real Xray mixed listener without a share link', () => {
+    const result = appendProtocolPresets({}, ['mixed'])
+    const inbound = result.added[0].inbound
+    assert.equal(inbound.protocol, 'mixed')
+    assert.equal(inbound.listen, '0.0.0.0')
+    assert.deepEqual(inbound.settings, { auth: 'noauth', udp: true, userLevel: 0 })
+    assert.equal(inbound.streamSettings.network, 'raw')
+    assert.equal(inbound.streamSettings.security, 'none')
+    assert.match(inbound.tag, /^mixed-/)
+})
+
 test('Reality Vision defaults to the shared 1.8.1 compatibility version', () => {
     const reality = appendProtocolPresets({}, ['vless-reality-vision']).added[0].inbound
         .streamSettings.realitySettings as Record<string, unknown>

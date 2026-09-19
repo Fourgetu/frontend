@@ -82,6 +82,7 @@ export interface QuickDeployHost {
 export interface QuickDeployParameters {
     coreType: ProxyCoreType
     hostAddress: string
+    createOptionalHosts?: boolean
     nodeUuid: string
     presetIds: readonly QuickDeployProtocolId[]
     profileUuid: string
@@ -122,6 +123,7 @@ export interface PlannedHost {
     sni: null | string
     transport: string
     willCreateHost: boolean
+    enabled: boolean
 }
 
 export interface QuickDeploymentPlan {
@@ -232,7 +234,11 @@ const withRealityMinClientVersion = (inbound: XrayInbound, minClientVer: string)
     }
 }
 
-const xrayPresetIds = new Set(PROTOCOL_PRESETS.map((preset) => preset.id))
+const xrayPresetIds = new Set<QuickDeployProtocolId>(
+    PROTOCOL_PRESETS.filter((preset) => preset.id !== 'mixed').map(
+        (preset) => preset.id as QuickDeployProtocolId
+    )
+)
 
 export const getPresetIdFromTag = (tag: string): QuickDeployProtocolId | undefined =>
     (
@@ -247,7 +253,9 @@ export const getPresetIdFromTag = (tag: string): QuickDeployProtocolId | undefin
             'singbox-hysteria2',
             'singbox-anytls',
             'singbox-socks5',
-            'singbox-hysteria2-port-hopping'
+            'singbox-hysteria2-port-hopping',
+            'xray-mixed',
+            'singbox-mixed'
         ] as const
     ).find((id) => tag.startsWith(`${id}-`))
 
@@ -381,7 +389,6 @@ const toPlannedInbound = (
 const validateParameters = (parameters: QuickDeployParameters): void => {
     if (!parameters.nodeUuid) throw new Error('A Node is required.')
     if (!parameters.profileUuid) throw new Error('A Config Profile is required.')
-    if (!parameters.hostAddress.trim()) throw new Error('A Host address is required.')
     if (parameters.presetIds.length === 0) throw new Error('At least one protocol is required.')
     if (new Set(parameters.presetIds).size !== parameters.presetIds.length) {
         throw new Error('Protocol selections must be unique.')
@@ -389,6 +396,14 @@ const validateParameters = (parameters: QuickDeployParameters): void => {
 
     for (const id of parameters.presetIds) {
         assertQuickDeployCapabilityEnabled(parameters.coreType, id)
+    }
+    const needsHostAddress = parameters.presetIds.some(
+        (id) =>
+            getQuickDeployCapability(id).createsHostByDefault !== false ||
+            parameters.createOptionalHosts
+    )
+    if (needsHostAddress && !parameters.hostAddress.trim()) {
+        throw new Error('A Host address is required.')
     }
 }
 
@@ -445,7 +460,7 @@ export const createQuickDeploymentPlan = (
         )
         const quickDeployOnly = appendXrayQuickDeployPresets(
             standard.config,
-            missingPresetIds.filter((id) => id === 'xray-socks5'),
+            missingPresetIds.filter((id) => id === 'xray-socks5' || id === 'xray-mixed'),
             { reservedTags, reservedPorts }
         )
         return {
@@ -500,12 +515,16 @@ export const createQuickDeploymentPlan = (
 
     const normalizedAddress = parameters.hostAddress.trim()
     const plannedHosts = inbounds.map((item): PlannedHost => {
-        const existingHost = findExistingHost(
-            hosts,
-            item.existingInboundUuid,
-            normalizedAddress,
-            getInboundPort(item.inbound)
-        )
+        const enabled =
+            item.preset.createsHostByDefault !== false || Boolean(parameters.createOptionalHosts)
+        const existingHost = enabled
+            ? findExistingHost(
+                  hosts,
+                  item.existingInboundUuid,
+                  normalizedAddress,
+                  getInboundPort(item.inbound)
+              )
+            : undefined
         const transport = isXrayInbound(item.inbound)
             ? (getString(getStreamSettings(item.inbound), 'network') ?? 'tcp')
             : item.inbound.type === 'hysteria2'
@@ -527,7 +546,8 @@ export const createQuickDeploymentPlan = (
             transport,
             security,
             existingHostUuid: existingHost?.uuid,
-            willCreateHost: !existingHost
+            willCreateHost: enabled && !existingHost,
+            enabled
         }
     })
 
@@ -833,6 +853,14 @@ export const executeQuickDeployment = async (
     }
 
     for (const item of freshPlan.inbounds) {
+        const plannedHost = freshPlan.hosts.find((host) => host.presetId === item.presetId)
+        if (!plannedHost?.enabled) {
+            result.hosts.push({
+                presetId: item.presetId,
+                ...skippedStep('This protocol does not create a subscription Host by default.')
+            })
+            continue
+        }
         const inboundUuid = inboundUuidByTag.get(item.inbound.tag)!
         const existingHost = findExistingHost(
             latestHosts,

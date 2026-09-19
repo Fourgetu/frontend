@@ -15,6 +15,8 @@ export type QuickDeployProtocolId =
     | 'singbox-anytls'
     | 'singbox-socks5'
     | 'singbox-hysteria2-port-hopping'
+    | 'xray-mixed'
+    | 'singbox-mixed'
 
 export interface CoreCapability {
     availability: QuickDeployAvailability
@@ -28,6 +30,7 @@ export interface CoreCapability {
     title: string
     transport: string
     udpStatus?: QuickDeployCapabilityStatus
+    createsHostByDefault?: boolean
 }
 
 /**
@@ -122,6 +125,19 @@ export const CORE_CAPABILITIES: readonly CoreCapability[] = [
         availability: 'disabled'
     },
     {
+        id: 'xray-mixed',
+        coreType: 'xray',
+        title: 'Mixed',
+        transport: 'SOCKS + HTTP',
+        security: 'None',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: false,
+        status: 'supported',
+        availability: 'enabled',
+        createsHostByDefault: false
+    },
+    {
         id: 'singbox-hysteria2',
         coreType: 'singbox',
         title: 'Hysteria2',
@@ -157,6 +173,19 @@ export const CORE_CAPABILITIES: readonly CoreCapability[] = [
         status: 'experimental',
         udpStatus: 'experimental',
         availability: 'disabled'
+    },
+    {
+        id: 'singbox-mixed',
+        coreType: 'singbox',
+        title: 'Mixed',
+        transport: 'SOCKS + HTTP',
+        security: 'None',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: false,
+        status: 'supported',
+        availability: 'enabled',
+        createsHostByDefault: false
     },
     {
         id: 'singbox-hysteria2-port-hopping',

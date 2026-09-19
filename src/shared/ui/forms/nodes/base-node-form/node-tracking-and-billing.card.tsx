@@ -11,7 +11,6 @@ import {
     Textarea
 } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { CreateNodeCommand, UpdateNodeCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +18,7 @@ import { PiTagDuotone } from 'react-icons/pi'
 import { TbBell, TbChartBar, TbChartLine, TbClock, TbExternalLink } from 'react-icons/tb'
 
 import { useGetNodesTags } from '@shared/api/hooks'
+import type { ConcurrentNodeFormValues } from '@shared/api/types/concurrent-node.schema'
 import { TrafficLimitInput } from '@shared/ui/forms/traffic-limit-input'
 import { SelectInfraProviderShared } from '@shared/ui/infra-billing/select-infra-provider/select-infra-provider.shared'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
@@ -34,15 +34,13 @@ function extractFirstUrl(text: string): null | string {
     return match ? match[0] : null
 }
 
-interface IProps<T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody> {
+interface IProps<T extends ConcurrentNodeFormValues> {
     cardVariants: Variants
     form: UseFormReturnType<T>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
-export const NodeTrackingAndBillingCard = <
-    T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody
->(
+export const NodeTrackingAndBillingCard = <T extends ConcurrentNodeFormValues>(
     props: IProps<T>
 ) => {
     const { t } = useTranslation()

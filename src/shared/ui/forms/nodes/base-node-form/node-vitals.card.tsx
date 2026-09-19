@@ -11,11 +11,9 @@ import {
 } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
 import {
-    CreateNodeCommand,
     GetNodeIntegrationsCommand,
     GetNodePluginsCommand,
-    GetNodeSecretKeyCommand,
-    UpdateNodeCommand
+    GetNodeSecretKeyCommand
 } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
@@ -30,6 +28,7 @@ import {
     TbWorld
 } from 'react-icons/tb'
 
+import type { ConcurrentNodeFormValues } from '@shared/api/types/concurrent-node.schema'
 import { CopyableFieldShared } from '@shared/ui/copyable-field/copyable-field'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
@@ -40,7 +39,7 @@ import { useExperimentalFeature } from '@entities/dashboard/view-preferences-sto
 import { COUNTRIES } from './constants'
 import integrationsClasses from './integrations-select.module.css'
 
-interface IProps<T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody> {
+interface IProps<T extends ConcurrentNodeFormValues> {
     cardVariants: Variants
     form: UseFormReturnType<T>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
@@ -50,11 +49,7 @@ interface IProps<T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.Req
     secretKey: GetNodeSecretKeyCommand.Response['response'] | undefined
 }
 
-export const NodeVitalsCard = <
-    T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody
->(
-    props: IProps<T>
-) => {
+export const NodeVitalsCard = <T extends ConcurrentNodeFormValues>(props: IProps<T>) => {
     const { t } = useTranslation()
     const {
         cardVariants,

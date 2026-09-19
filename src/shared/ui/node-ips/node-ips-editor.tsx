@@ -14,16 +14,12 @@ import {
     Tooltip
 } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import {
-    CreateNodeCommand,
-    TNodeIps,
-    TNodeIpStatus,
-    UpdateNodeCommand
-} from '@remnawave/backend-contract'
+import { TNodeIps, TNodeIpStatus } from '@remnawave/backend-contract'
 import { ReactNode, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TbNetwork, TbPlus } from 'react-icons/tb'
 
+import type { ConcurrentNodeFormValues } from '@shared/api/types/concurrent-node.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
@@ -36,7 +32,7 @@ interface IEditableNodeIp {
     status: TNodeIpStatus
 }
 
-interface IProps<T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody> {
+interface IProps<T extends ConcurrentNodeFormValues> {
     form: UseFormReturnType<T>
     size?: MantineSize
 }
@@ -55,11 +51,7 @@ const nextRowId = () => {
 const toEditableIps = (ips: null | TNodeIps | undefined): IEditableNodeIp[] =>
     (ips ?? []).map((entry) => ({ id: nextRowId(), ip: entry.ip, status: entry.status }))
 
-export const NodeIpsEditor = <
-    T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody
->(
-    props: IProps<T>
-) => {
+export const NodeIpsEditor = <T extends ConcurrentNodeFormValues>(props: IProps<T>) => {
     const { form, size = 'sm' } = props
 
     const { t } = useTranslation()

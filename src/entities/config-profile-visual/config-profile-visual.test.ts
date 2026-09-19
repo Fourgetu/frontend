@@ -3,6 +3,12 @@ import type { JsonObject } from './types.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { supportsInboundProtocol } from './capabilities.ts'
+import {
+    buildInboundEditorOperations,
+    getInboundEditorDraft,
+    normalizeTagValues
+} from './inbound-editor.ts'
 import {
     cloneInbound,
     getInboundReferences,
@@ -489,6 +495,131 @@ test('sing-box snippet-managed route rules are read-only', () => {
             operations: [{ op: 'set', path: ['route', 'rules', 0, 'outbound'], value: 'direct' }]
         })
     )
+})
+
+test('Mixed inbound capability follows the audited Xray and sing-box runtimes', () => {
+    assert.equal(supportsInboundProtocol('xray', 'mixed'), true)
+    assert.equal(supportsInboundProtocol('singbox', 'mixed'), true)
+})
+
+test('Reality visual no-op is semantically unchanged and a single SNI edit is targeted', () => {
+    const inbound = {
+        tag: 'reality',
+        listen: '0.0.0.0',
+        port: 443,
+        protocol: 'vless',
+        settings: { clients: [], decryption: 'none' },
+        streamSettings: {
+            network: 'raw',
+            security: 'reality',
+            rawSettings: { header: { type: 'none' }, unknownTransport: true },
+            realitySettings: {
+                show: false,
+                xver: 0,
+                target: 'example.com:443',
+                serverNames: ['a.example.com', 'b.example.com'],
+                shortIds: ['abcd'],
+                privateKey: 'secret',
+                minClientVer: '1.8.1',
+                unknownReality: { keep: true }
+            }
+        },
+        customAdvanced: { keep: true }
+    }
+    const draft = getInboundEditorDraft(inbound, 'xray', '1.8.1')
+    assert.deepEqual(buildInboundEditorOperations(inbound, 0, 'xray', draft), [])
+    draft.realityServerNames = ['a.example.com', 'c.example.com']
+    const next = applyVisualPatch(
+        { inbounds: [inbound] },
+        {
+            operations: buildInboundEditorOperations(inbound, 0, 'xray', draft)
+        }
+    )
+    const edited = (next.inbounds as JsonObject[])[0]
+    const stream = edited.streamSettings as JsonObject
+    const reality = stream.realitySettings as JsonObject
+    assert.deepEqual(reality.serverNames, ['a.example.com', 'c.example.com'])
+    assert.deepEqual(reality.unknownReality, { keep: true })
+    assert.deepEqual((stream.rawSettings as JsonObject).unknownTransport, true)
+    assert.deepEqual(edited.customAdvanced, { keep: true })
+})
+
+test('Reality minClientVer, TLS and sniffing edits preserve unrelated fields', () => {
+    const inbound = {
+        tag: 'tls-entry',
+        listen: '0.0.0.0',
+        port: 443,
+        protocol: 'trojan',
+        streamSettings: {
+            network: 'raw',
+            security: 'tls',
+            rawSettings: { header: { type: 'none' } },
+            tlsSettings: {
+                serverName: 'old.example.com',
+                alpn: ['h2'],
+                certificates: [{ certificateFile: '/old.crt', keyFile: '/old.key', keep: true }],
+                keep: true
+            }
+        },
+        sniffing: { enabled: false, destOverride: ['http'], keep: true }
+    }
+    const draft = getInboundEditorDraft(inbound, 'xray', '1.8.1')
+    draft.tlsServerName = 'new.example.com'
+    draft.sniffEnabled = true
+    const next = applyVisualPatch(
+        { inbounds: [inbound] },
+        {
+            operations: buildInboundEditorOperations(inbound, 0, 'xray', draft)
+        }
+    )
+    const edited = (next.inbounds as JsonObject[])[0]
+    const stream = edited.streamSettings as JsonObject
+    assert.equal((stream.tlsSettings as JsonObject).serverName, 'new.example.com')
+    assert.equal((stream.tlsSettings as JsonObject).keep, true)
+    assert.equal((edited.sniffing as JsonObject).enabled, true)
+    assert.equal((edited.sniffing as JsonObject).keep, true)
+})
+
+test('tag inputs split pasted values, deduplicate and preserve first-seen order', () => {
+    assert.deepEqual(
+        normalizeTagValues(['a.example.com, b.example.com', 'a.example.com\nc.example.com']),
+        ['a.example.com', 'b.example.com', 'c.example.com']
+    )
+})
+
+test('Mixed Xray and sing-box objects remain core-specific and editable', () => {
+    const xray = {
+        tag: 'mixed-xray',
+        listen: '0.0.0.0',
+        port: 2080,
+        protocol: 'mixed',
+        settings: { auth: 'noauth', udp: true, userLevel: 0, keep: true },
+        streamSettings: { network: 'raw', security: 'none' }
+    }
+    const xrayDraft = getInboundEditorDraft(xray, 'xray', '1.8.1')
+    xrayDraft.auth = 'password'
+    xrayDraft.username = 'alice'
+    xrayDraft.password = 'secret'
+    const xrayNext = applyVisualPatch(
+        { inbounds: [xray] },
+        {
+            operations: buildInboundEditorOperations(xray, 0, 'xray', xrayDraft)
+        }
+    )
+    const settings = (xrayNext.inbounds as JsonObject[])[0].settings as JsonObject
+    assert.deepEqual(settings.accounts, [{ user: 'alice', pass: 'secret' }])
+    assert.equal(settings.keep, true)
+
+    const singbox = {
+        tag: 'mixed-singbox',
+        type: 'mixed',
+        listen: '0.0.0.0',
+        listen_port: 2080,
+        users: []
+    }
+    const singboxDraft = getInboundEditorDraft(singbox, 'singbox', '1.8.1')
+    assert.equal(singboxDraft.protocol, 'mixed')
+    assert.equal(buildInboundEditorOperations(singbox, 0, 'singbox', singboxDraft).length, 0)
 })
 
 test('parses inbound detail fields for Xray Reality', () => {

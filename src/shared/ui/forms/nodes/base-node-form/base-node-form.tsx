@@ -8,8 +8,7 @@ import {
     GetNodeIntegrationsCommand,
     GetNodePluginsCommand,
     GetNodeSecretKeyCommand,
-    GetNodeCommand,
-    UpdateNodeCommand
+    GetNodeCommand
 } from '@remnawave/backend-contract'
 import { NodeErrorMessageWidget } from '@widgets/dashboard/nodes/node-error-message'
 import { motion } from 'framer-motion'
@@ -18,6 +17,7 @@ import { ReactNode } from 'react'
 import { PiFloppyDiskDuotone } from 'react-icons/pi'
 import { TbCopy, TbDots } from 'react-icons/tb'
 
+import type { ConcurrentUpdateNodeRequestBody } from '@shared/api/types/concurrent-node.schema'
 import { useIsMobile } from '@shared/hooks'
 import { ModalFooter } from '@shared/ui/modal-footer'
 
@@ -48,7 +48,7 @@ const cardVariants = {
     }
 }
 
-interface IProps<T extends UpdateNodeCommand.RequestBody> {
+interface IProps<T extends ConcurrentUpdateNodeRequestBody> {
     form: UseFormReturnType<T>
     handleClose: () => void
     handleSubmit: () => void
@@ -61,7 +61,7 @@ interface IProps<T extends UpdateNodeCommand.RequestBody> {
     secretKey: GetNodeSecretKeyCommand.Response['response'] | undefined
 }
 
-export const BaseNodeForm = <T extends UpdateNodeCommand.RequestBody>(props: IProps<T>) => {
+export const BaseNodeForm = <T extends ConcurrentUpdateNodeRequestBody>(props: IProps<T>) => {
     const {
         form,
         node,

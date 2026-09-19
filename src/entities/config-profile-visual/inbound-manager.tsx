@@ -14,6 +14,7 @@ import {
     Badge,
     Button,
     Card,
+    Checkbox,
     Divider,
     Group,
     Modal,
@@ -22,6 +23,7 @@ import {
     SimpleGrid,
     Stack,
     Tabs,
+    TagsInput,
     Text,
     TextInput
 } from '@mantine/core'
@@ -32,12 +34,17 @@ import { TbCopy, TbEdit, TbPlus, TbTrash } from 'react-icons/tb'
 
 import {
     applyVisualPatch,
+    buildInboundEditorOperations,
     cloneInbound,
+    getInboundEditorDraft,
     getInboundDisplay,
     getInboundReferences,
     getInboundPortConflict,
     parseReferencePath,
-    validateInboundCollection
+    normalizeTagValues,
+    supportsInboundProtocol,
+    validateInboundCollection,
+    type InboundEditorDraft
 } from './index.ts'
 
 type InboundManagerProps = {
@@ -47,14 +54,11 @@ type InboundManagerProps = {
     onConfigChange: (config: JsonObject, description: string) => void
 }
 
-type EditorDraft = {
+type AddDraft = {
     tag: string
     listen: string
     port: string
     minClientVer: string
-}
-
-type AddDraft = EditorDraft & {
     presetId: string
     targetDomain: string
     serverName: string
@@ -63,30 +67,27 @@ type AddDraft = EditorDraft & {
     keyFile: string
 }
 
-const asPortString = (value: unknown): string =>
-    typeof value === 'number' || typeof value === 'string' ? String(value) : ''
-
 const getPresetOptions = (coreType: VisualCoreType) => {
     if (coreType === 'singbox') {
         return CORE_CAPABILITIES.filter(
             (capability) =>
                 capability.coreType === 'singbox' &&
                 capability.availability === 'enabled' &&
-                ['singbox-hysteria2', 'singbox-anytls', 'singbox-socks5'].includes(capability.id)
-        ).map((capability) => ({ value: capability.id, label: capability.title }))
+                ['singbox-hysteria2', 'singbox-anytls', 'singbox-socks5', 'singbox-mixed'].includes(
+                    capability.id
+                )
+        )
+            .filter(
+                (capability) =>
+                    capability.id !== 'singbox-mixed' || supportsInboundProtocol(coreType, 'mixed')
+            )
+            .map((capability) => ({ value: capability.id, label: capability.title }))
     }
     return PROTOCOL_PRESETS.filter((preset) => preset.supported).map((preset) => ({
         value: preset.id,
         label: preset.title
     }))
 }
-
-const getDraftForInbound = (inbound: VisualInbound): EditorDraft => ({
-    tag: inbound.tag,
-    listen: inbound.listen,
-    port: asPortString(inbound.port),
-    minClientVer: inbound.reality?.minClientVer ?? REALITY_MIN_CLIENT_VERSION_COMPAT
-})
 
 const isSnippetManaged = (inbound: VisualInbound): boolean =>
     typeof inbound.raw.snippet === 'string' && inbound.raw.snippet.length > 0
@@ -121,12 +122,9 @@ export function InboundVisualManager({
     const { t } = useTranslation()
     const [editorIndex, setEditorIndex] = useState<number | null>(null)
     const [editorOpen, setEditorOpen] = useState(false)
-    const [editorDraft, setEditorDraft] = useState<EditorDraft>({
-        tag: '',
-        listen: '',
-        port: '',
-        minClientVer: REALITY_MIN_CLIENT_VERSION_COMPAT
-    })
+    const [editorDraft, setEditorDraft] = useState<InboundEditorDraft>(() =>
+        getInboundEditorDraft({}, coreType, REALITY_MIN_CLIENT_VERSION_COMPAT)
+    )
     const [addOpen, setAddOpen] = useState(false)
     const [addDraft, setAddDraft] = useState<AddDraft>({
         tag: '',
@@ -143,7 +141,6 @@ export function InboundVisualManager({
 
     const inbounds = useMemo(() => document.inboundDetails, [document.inboundDetails])
     const editorInbound = editorIndex === null ? undefined : inbounds[editorIndex]
-    const editorDisplay = editorInbound ? getInboundDisplay(editorInbound) : undefined
     const editorSnippetManaged = editorInbound ? isSnippetManaged(editorInbound) : false
     const editorReferences = editorInbound ? getInboundReferences(config, editorInbound.tag) : []
     const localizeError = (error: string) => {
@@ -169,7 +166,9 @@ export function InboundVisualManager({
 
     const openEditor = (inbound: VisualInbound) => {
         setEditorIndex(inbound.index)
-        setEditorDraft(getDraftForInbound(inbound))
+        setEditorDraft(
+            getInboundEditorDraft(inbound.raw, coreType, REALITY_MIN_CLIENT_VERSION_COMPAT)
+        )
         setEditorOpen(true)
     }
 
@@ -281,48 +280,12 @@ export function InboundVisualManager({
             return
         }
 
-        const operations = [] as Array<{ op: 'set'; path: Array<string | number>; value: unknown }>
-        if (editorDraft.tag.trim() !== editorInbound.tag) {
-            operations.push({
-                op: 'set',
-                path: ['inbounds', editorInbound.index, 'tag'],
-                value: editorDraft.tag.trim()
-            })
-        }
-        if (editorDraft.listen.trim() !== editorInbound.listen) {
-            operations.push({
-                op: 'set',
-                path: ['inbounds', editorInbound.index, 'listen'],
-                value: editorDraft.listen.trim()
-            })
-        }
-        if (String(port) !== String(editorInbound.port)) {
-            operations.push({
-                op: 'set',
-                path: [
-                    'inbounds',
-                    editorInbound.index,
-                    coreType === 'singbox' ? 'listen_port' : 'port'
-                ],
-                value: port
-            })
-        }
-        if (
-            editorInbound.reality &&
-            editorDraft.minClientVer !== editorInbound.reality.minClientVer
-        ) {
-            operations.push({
-                op: 'set',
-                path: [
-                    'inbounds',
-                    editorInbound.index,
-                    'streamSettings',
-                    'realitySettings',
-                    'minClientVer'
-                ],
-                value: editorDraft.minClientVer.trim() || REALITY_MIN_CLIENT_VERSION_COMPAT
-            })
-        }
+        const operations = buildInboundEditorOperations(
+            editorInbound.raw,
+            editorInbound.index,
+            coreType,
+            editorDraft
+        )
         const renaming = editorDraft.tag.trim() !== editorInbound.tag
         const commit = () => {
             const nextOperations = [...operations]
@@ -583,16 +546,22 @@ export function InboundVisualManager({
                                 {localizeReadOnlyReason(editorInbound.readOnlyReason)}
                             </Alert>
                         )}
-                        <Tabs defaultValue="basic">
+                        <Tabs defaultValue="basic" keepMounted={false}>
                             <Tabs.List>
                                 <Tabs.Tab value="basic">
                                     {t('visual-config-builder.basic')}
+                                </Tabs.Tab>
+                                <Tabs.Tab value="protocol">
+                                    {t('visual-config-builder.inbound.protocol-tab')}
                                 </Tabs.Tab>
                                 <Tabs.Tab value="transport">
                                     {t('visual-config-builder.transport')}
                                 </Tabs.Tab>
                                 <Tabs.Tab value="security">
                                     {t('visual-config-builder.security')}
+                                </Tabs.Tab>
+                                <Tabs.Tab value="sniffing">
+                                    {t('visual-config-builder.inbound.sniffing')}
                                 </Tabs.Tab>
                                 <Tabs.Tab value="advanced">
                                     {t('visual-config-builder.advanced')}
@@ -612,9 +581,13 @@ export function InboundVisualManager({
                                         }
                                     />
                                     <TextInput
-                                        disabled={editorSnippetManaged}
+                                        label={t('visual-config-builder.core')}
+                                        value={coreType === 'xray' ? 'Xray' : 'sing-box'}
+                                        readOnly
+                                    />
+                                    <TextInput
                                         label={t('visual-config-builder.protocol-type')}
-                                        value={editorInbound.protocol}
+                                        value={editorDraft.protocol}
                                         readOnly
                                     />
                                     <TextInput
@@ -643,32 +616,548 @@ export function InboundVisualManager({
                                     </Text>
                                 </Stack>
                             </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="transport">
-                                <Text>
-                                    {t('visual-config-builder.transport')}:{' '}
-                                    {editorDisplay?.transport ?? '—'}
-                                </Text>
-                                <Text c="dimmed" size="sm" mt="xs">
-                                    {t('visual-config-builder.inbound.transport-json-only')}
-                                </Text>
+                            <Tabs.Panel pt="md" value="protocol">
+                                {editorDraft.protocol === 'mixed' ? (
+                                    <Stack>
+                                        <Select
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.inbound.auth')}
+                                            data={[
+                                                { value: 'noauth', label: 'noauth' },
+                                                { value: 'password', label: 'password' }
+                                            ]}
+                                            value={editorDraft.auth}
+                                            onChange={(value) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    auth:
+                                                        value === 'password' ? 'password' : 'noauth'
+                                                })
+                                            }
+                                        />
+                                        {coreType === 'xray' && (
+                                            <SimpleGrid cols={2}>
+                                                <Checkbox
+                                                    checked={editorDraft.udp}
+                                                    disabled={editorSnippetManaged}
+                                                    label="UDP"
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            udp: event.currentTarget.checked
+                                                        })
+                                                    }
+                                                />
+                                                <NumberInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="userLevel"
+                                                    value={editorDraft.userLevel}
+                                                    onChange={(value) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            userLevel: String(value)
+                                                        })
+                                                    }
+                                                    min={0}
+                                                />
+                                            </SimpleGrid>
+                                        )}
+                                        {editorDraft.auth === 'password' && (
+                                            <SimpleGrid cols={2}>
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label={t(
+                                                        'visual-config-builder.inbound.username'
+                                                    )}
+                                                    value={editorDraft.username}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            username: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label={t(
+                                                        'visual-config-builder.inbound.password'
+                                                    )}
+                                                    type="password"
+                                                    value={editorDraft.password}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            password: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                            </SimpleGrid>
+                                        )}
+                                    </Stack>
+                                ) : (
+                                    <Alert color="blue">
+                                        {t('visual-config-builder.inbound.managed-protocol-fields')}
+                                    </Alert>
+                                )}
                             </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="security">
+                            <Tabs.Panel pt="md" value="transport">
                                 <Stack>
-                                    <Text>
-                                        {t('visual-config-builder.security')}:{' '}
-                                        {editorDisplay?.security ?? '—'}
-                                    </Text>
-                                    {editorInbound.reality && (
+                                    <Select
+                                        disabled={editorSnippetManaged || coreType === 'singbox'}
+                                        label={t('visual-config-builder.transport')}
+                                        data={[
+                                            'raw',
+                                            'tcp',
+                                            'ws',
+                                            'grpc',
+                                            'httpupgrade',
+                                            'xhttp',
+                                            'kcp'
+                                        ]}
+                                        value={editorDraft.transport || null}
+                                        onChange={(value) =>
+                                            setEditorDraft({
+                                                ...editorDraft,
+                                                transport: value ?? ''
+                                            })
+                                        }
+                                    />
+                                    {['raw', 'tcp', 'kcp'].includes(editorDraft.transport) && (
+                                        <Select
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.inbound.header-type')}
+                                            data={['none', 'http']}
+                                            value={editorDraft.headerType || 'none'}
+                                            onChange={(value) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    headerType: value ?? 'none'
+                                                })
+                                            }
+                                        />
+                                    )}
+                                    {['ws', 'httpupgrade', 'xhttp'].includes(
+                                        editorDraft.transport
+                                    ) && (
+                                        <SimpleGrid cols={2}>
+                                            <TextInput
+                                                disabled={editorSnippetManaged}
+                                                label={t('visual-config-builder.inbound.path')}
+                                                value={editorDraft.path}
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        path: event.currentTarget.value
+                                                    })
+                                                }
+                                            />
+                                            <TextInput
+                                                disabled={editorSnippetManaged}
+                                                label="Host"
+                                                value={editorDraft.host}
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        host: event.currentTarget.value
+                                                    })
+                                                }
+                                            />
+                                        </SimpleGrid>
+                                    )}
+                                    {editorDraft.transport === 'grpc' && (
+                                        <>
+                                            <TextInput
+                                                disabled={editorSnippetManaged}
+                                                label="serviceName"
+                                                value={editorDraft.serviceName}
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        serviceName: event.currentTarget.value
+                                                    })
+                                                }
+                                            />
+                                            <Checkbox
+                                                checked={editorDraft.multiMode}
+                                                disabled={editorSnippetManaged}
+                                                label="multiMode"
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        multiMode: event.currentTarget.checked
+                                                    })
+                                                }
+                                            />
+                                        </>
+                                    )}
+                                    {editorDraft.transport === 'xhttp' && (
                                         <TextInput
                                             disabled={editorSnippetManaged}
-                                            label={t(
-                                                'visual-config-builder.minimum-client-version'
-                                            )}
-                                            value={editorDraft.minClientVer}
+                                            label="mode"
+                                            value={editorDraft.xhttpMode}
                                             onChange={(event) =>
                                                 setEditorDraft({
                                                     ...editorDraft,
-                                                    minClientVer: event.currentTarget.value
+                                                    xhttpMode: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                    )}
+                                    {coreType === 'singbox' && (
+                                        <Text c="dimmed" size="sm">
+                                            {t('visual-config-builder.inbound.transport-core-note')}
+                                        </Text>
+                                    )}
+                                </Stack>
+                            </Tabs.Panel>
+                            <Tabs.Panel pt="md" value="security">
+                                <Stack>
+                                    <Select
+                                        disabled={editorSnippetManaged}
+                                        label={t('visual-config-builder.security')}
+                                        data={
+                                            coreType === 'xray'
+                                                ? ['none', 'tls', 'reality']
+                                                : ['none', 'tls']
+                                        }
+                                        value={editorDraft.security}
+                                        onChange={(value) =>
+                                            setEditorDraft({
+                                                ...editorDraft,
+                                                security:
+                                                    value === 'reality'
+                                                        ? 'reality'
+                                                        : value === 'tls'
+                                                          ? 'tls'
+                                                          : 'none'
+                                            })
+                                        }
+                                    />
+                                    {editorDraft.security === 'reality' && coreType === 'xray' && (
+                                        <Stack>
+                                            <SimpleGrid cols={2}>
+                                                <Checkbox
+                                                    checked={editorDraft.realityShow}
+                                                    disabled={editorSnippetManaged}
+                                                    label="show"
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityShow: event.currentTarget.checked
+                                                        })
+                                                    }
+                                                />
+                                                <NumberInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="xver"
+                                                    value={editorDraft.realityXver}
+                                                    onChange={(value) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityXver: String(value)
+                                                        })
+                                                    }
+                                                    min={0}
+                                                />
+                                            </SimpleGrid>
+                                            <TextInput
+                                                disabled={editorSnippetManaged}
+                                                label={t(
+                                                    'visual-config-builder.inbound.reality-target'
+                                                )}
+                                                value={editorDraft.realityTarget}
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        realityTarget: event.currentTarget.value
+                                                    })
+                                                }
+                                            />
+                                            <TagsInput
+                                                disabled={editorSnippetManaged}
+                                                label="SNI / serverNames"
+                                                splitChars={[',', '\n']}
+                                                value={editorDraft.realityServerNames}
+                                                onChange={(value) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        realityServerNames:
+                                                            normalizeTagValues(value)
+                                                    })
+                                                }
+                                            />
+                                            <TextInput
+                                                disabled={editorSnippetManaged}
+                                                label="privateKey"
+                                                type="password"
+                                                value={editorDraft.realityPrivateKey}
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        realityPrivateKey: event.currentTarget.value
+                                                    })
+                                                }
+                                            />
+                                            <TagsInput
+                                                disabled={editorSnippetManaged}
+                                                label="shortIds"
+                                                splitChars={[',', '\n']}
+                                                value={editorDraft.realityShortIds}
+                                                onChange={(value) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        realityShortIds: normalizeTagValues(value)
+                                                    })
+                                                }
+                                            />
+                                            <SimpleGrid cols={2}>
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="spiderX"
+                                                    value={editorDraft.realitySpiderX}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realitySpiderX:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="fingerprint / uTLS"
+                                                    value={editorDraft.realityFingerprint}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityFingerprint:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <NumberInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="maxTimeDiff"
+                                                    value={editorDraft.realityMaxTimeDiff}
+                                                    onChange={(value) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityMaxTimeDiff: String(value)
+                                                        })
+                                                    }
+                                                    min={0}
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label={t(
+                                                        'visual-config-builder.minimum-client-version'
+                                                    )}
+                                                    value={editorDraft.minClientVer}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            minClientVer: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label={t(
+                                                        'visual-config-builder.inbound.maximum-client-version'
+                                                    )}
+                                                    value={editorDraft.maxClientVer}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            maxClientVer: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                            </SimpleGrid>
+                                        </Stack>
+                                    )}
+                                    {editorDraft.security === 'tls' && (
+                                        <Stack>
+                                            <TextInput
+                                                disabled={editorSnippetManaged}
+                                                label="serverName / SNI"
+                                                value={editorDraft.tlsServerName}
+                                                onChange={(event) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        tlsServerName: event.currentTarget.value
+                                                    })
+                                                }
+                                            />
+                                            <TagsInput
+                                                disabled={editorSnippetManaged}
+                                                label="ALPN"
+                                                splitChars={[',', '\n']}
+                                                value={editorDraft.tlsAlpn}
+                                                onChange={(value) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        tlsAlpn: normalizeTagValues(value)
+                                                    })
+                                                }
+                                            />
+                                            <SimpleGrid cols={2}>
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label={t(
+                                                        'visual-config-builder.certificate-file'
+                                                    )}
+                                                    value={editorDraft.certificateFile}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            certificateFile:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label={t('visual-config-builder.key-file')}
+                                                    value={editorDraft.keyFile}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            keyFile: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="minVersion"
+                                                    value={editorDraft.tlsMinVersion}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            tlsMinVersion: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="maxVersion"
+                                                    value={editorDraft.tlsMaxVersion}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            tlsMaxVersion: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    disabled={editorSnippetManaged}
+                                                    label="fingerprint / uTLS"
+                                                    value={editorDraft.tlsFingerprint}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            tlsFingerprint:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                            </SimpleGrid>
+                                        </Stack>
+                                    )}
+                                </Stack>
+                            </Tabs.Panel>
+                            <Tabs.Panel pt="md" value="sniffing">
+                                <Stack>
+                                    <Checkbox
+                                        checked={editorDraft.sniffEnabled}
+                                        disabled={editorSnippetManaged}
+                                        label={t('visual-config-builder.inbound.sniff-enabled')}
+                                        onChange={(event) =>
+                                            setEditorDraft({
+                                                ...editorDraft,
+                                                sniffEnabled: event.currentTarget.checked
+                                            })
+                                        }
+                                    />
+                                    {coreType === 'xray' ? (
+                                        <>
+                                            <TagsInput
+                                                disabled={editorSnippetManaged}
+                                                label="destOverride"
+                                                splitChars={[',', '\n']}
+                                                value={editorDraft.sniffDestOverride}
+                                                onChange={(value) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        sniffDestOverride: normalizeTagValues(value)
+                                                    })
+                                                }
+                                            />
+                                            <SimpleGrid cols={2}>
+                                                <Checkbox
+                                                    checked={editorDraft.sniffMetadataOnly}
+                                                    disabled={editorSnippetManaged}
+                                                    label="metadataOnly"
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            sniffMetadataOnly:
+                                                                event.currentTarget.checked
+                                                        })
+                                                    }
+                                                />
+                                                <Checkbox
+                                                    checked={editorDraft.sniffRouteOnly}
+                                                    disabled={editorSnippetManaged}
+                                                    label="routeOnly"
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            sniffRouteOnly:
+                                                                event.currentTarget.checked
+                                                        })
+                                                    }
+                                                />
+                                            </SimpleGrid>
+                                            <TagsInput
+                                                disabled={editorSnippetManaged}
+                                                label="domainsExcluded"
+                                                splitChars={[',', '\n']}
+                                                value={editorDraft.sniffDomainsExcluded}
+                                                onChange={(value) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        sniffDomainsExcluded:
+                                                            normalizeTagValues(value)
+                                                    })
+                                                }
+                                            />
+                                            <TagsInput
+                                                disabled={editorSnippetManaged}
+                                                label="ipsExcluded"
+                                                splitChars={[',', '\n']}
+                                                value={editorDraft.sniffIpsExcluded}
+                                                onChange={(value) =>
+                                                    setEditorDraft({
+                                                        ...editorDraft,
+                                                        sniffIpsExcluded: normalizeTagValues(value)
+                                                    })
+                                                }
+                                            />
+                                        </>
+                                    ) : (
+                                        <Checkbox
+                                            checked={editorDraft.sniffDestOverride.includes(
+                                                'destination'
+                                            )}
+                                            disabled={editorSnippetManaged}
+                                            label="sniff_override_destination"
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    sniffDestOverride: event.currentTarget.checked
+                                                        ? ['destination']
+                                                        : []
                                                 })
                                             }
                                         />

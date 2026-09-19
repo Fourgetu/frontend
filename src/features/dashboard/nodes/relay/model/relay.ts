@@ -9,6 +9,7 @@ export type RelayNetwork = 'grpc' | 'httpupgrade' | 'kcp' | 'raw' | 'tcp' | 'ws'
 
 export interface RelayTarget {
     address: string
+    alterId?: number
     alpn?: string[]
     allowInsecure?: boolean
     encryption?: string
@@ -285,6 +286,10 @@ const parseVmess = (raw: string): RelayTarget => {
 
     return {
         address: requireAddress(address, 'vmess'),
+        alterId:
+            typeof decoded.aid === 'number' || typeof decoded.aid === 'string'
+                ? Number(decoded.aid) || 0
+                : 0,
         alpn,
         allowInsecure:
             decoded.allowInsecure === true ||
@@ -630,6 +635,7 @@ export const relayTargetFingerprint = (target: RelayTarget): string =>
             new TextEncoder().encode(
                 stableSerialize({
                     address: target.address.toLowerCase(),
+                    alterId: target.alterId,
                     alpn: target.alpn,
                     allowInsecure: target.allowInsecure,
                     encryption: target.encryption,

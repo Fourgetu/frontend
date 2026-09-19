@@ -9,23 +9,23 @@ import {
     Text
 } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { CreateNodeCommand, UpdateNodeCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { HiQuestionMarkCircle } from 'react-icons/hi'
 import { TbChartLine, TbMinus, TbPlus } from 'react-icons/tb'
 
+import type { ConcurrentNodeFormValues } from '@shared/api/types/concurrent-node.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
-interface IProps {
+interface IProps<T extends ConcurrentNodeFormValues> {
     cardVariants: Variants
-    form: UseFormReturnType<CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody>
+    form: UseFormReturnType<T>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
-export const NodeConsumptionCard = (props: IProps) => {
+export const NodeConsumptionCard = <T extends ConcurrentNodeFormValues>(props: IProps<T>) => {
     const { t } = useTranslation()
     const { cardVariants, form, motionWrapper } = props
     const consumptionMultiplierRef = useRef<NumberInputHandlers>(null)
