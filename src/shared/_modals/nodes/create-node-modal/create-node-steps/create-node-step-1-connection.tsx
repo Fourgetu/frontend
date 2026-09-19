@@ -14,7 +14,6 @@ import {
     UnstyledButton
 } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { CreateNodeCommand } from '@remnawave/backend-contract'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PiArrowRight, PiTagDuotone } from 'react-icons/pi'
@@ -29,6 +28,7 @@ import {
 } from 'react-icons/tb'
 
 import { useGetNodePlugins, useGetNodesTags } from '@shared/api/hooks'
+import type { ConcurrentCreateNodeRequestBody } from '@shared/api/types/concurrent-node.schema'
 import { CopyableFieldShared } from '@shared/ui/copyable-field/copyable-field'
 import { COUNTRIES } from '@shared/ui/forms/nodes/base-node-form/constants'
 import { SelectInfraProviderShared } from '@shared/ui/infra-billing/select-infra-provider/select-infra-provider.shared'
@@ -38,7 +38,7 @@ import { CopyDockerComposeWidget } from './copy-docker-compose.widget'
 
 interface IProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    form: UseFormReturnType<CreateNodeCommand.RequestBody, any>
+    form: UseFormReturnType<ConcurrentCreateNodeRequestBody, any>
     onNext: () => void
     port: number
     secretKey: string | undefined

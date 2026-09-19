@@ -1,4 +1,7 @@
-import type { GetConfigProfileByUuidCommand } from '@remnawave/backend-contract'
+import type {
+    GetConfigProfileByUuidCommand,
+    GetConfigProfilesCommand
+} from '@remnawave/backend-contract'
 
 export type ConfigProfileCoreType = 'xray' | 'singbox'
 
@@ -11,3 +14,8 @@ export type ConfigProfileCoreType = 'xray' | 'singbox'
 export type ConfigProfileWithCoreType = GetConfigProfileByUuidCommand.Response['response'] & {
     coreType?: ConfigProfileCoreType
 }
+
+export type ConfigProfileListItemWithCoreType =
+    GetConfigProfilesCommand.Response['response']['configProfiles'][number] & {
+        coreType: ConfigProfileCoreType
+    }

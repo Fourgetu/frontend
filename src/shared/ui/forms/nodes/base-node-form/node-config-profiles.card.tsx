@@ -1,26 +1,24 @@
+import type { ConcurrentProfileBindings } from '@features/dashboard/nodes/config-profile-selection/model/concurrent-profile-selection'
+
 import { ShowConfigProfilesWithInboundsFeature } from '@features/ui/dashboard/nodes/show-config-profiles-with-inbounds'
 import { Skeleton, Stack } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { CreateNodeCommand, UpdateNodeCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, motion, Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { SiSecurityscorecard } from 'react-icons/si'
 
 import { useGetConfigProfiles } from '@shared/api/hooks'
+import type { ConcurrentNodeFormValues } from '@shared/api/types/concurrent-node.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
-interface IProps<T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody> {
+interface IProps<T extends ConcurrentNodeFormValues> {
     cardVariants: Variants
     form: UseFormReturnType<T>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
-export const NodeConfigProfilesCard = <
-    T extends CreateNodeCommand.RequestBody | UpdateNodeCommand.RequestBody
->(
-    props: IProps<T>
-) => {
+export const NodeConfigProfilesCard = <T extends ConcurrentNodeFormValues>(props: IProps<T>) => {
     const { t } = useTranslation()
     const { cardVariants, form, motionWrapper } = props
 
@@ -28,21 +26,10 @@ export const NodeConfigProfilesCard = <
 
     const { data: configProfiles, isLoading: isConfigProfilesLoading } = useGetConfigProfiles()
 
-    const saveInbounds = (inbounds: string[], configProfileUuid: string) => {
-        form.setValues({
-            configProfile: {
-                activeInbounds: inbounds,
-                activeConfigProfileUuid: configProfileUuid
-            }
-        } as Partial<T>)
-        form.setTouched({
-            activeConfigProfileUuid: true,
-            activeInbounds: true
-        })
-        form.setDirty({
-            activeConfigProfileUuid: true,
-            activeInbounds: true
-        })
+    const saveInbounds = (bindings: ConcurrentProfileBindings) => {
+        form.setValues(bindings as Partial<T>)
+        form.setTouched({ configProfile: true, singBoxConfigProfile: true } as never)
+        form.setDirty({ configProfile: true, singBoxConfigProfile: true } as never)
     }
 
     return (
@@ -77,14 +64,15 @@ export const NodeConfigProfilesCard = <
                             }}
                         >
                             <ShowConfigProfilesWithInboundsFeature
-                                activeConfigProfileInbounds={
-                                    form.getValues().configProfile?.activeInbounds ?? []
-                                }
-                                activeConfigProfileUuid={
-                                    form.getValues().configProfile?.activeConfigProfileUuid
-                                }
+                                activeConfigProfiles={{
+                                    configProfile: form.getValues().configProfile ?? null,
+                                    singBoxConfigProfile:
+                                        form.getValues().singBoxConfigProfile ?? null
+                                }}
                                 configProfiles={configProfiles.configProfiles}
-                                errors={form.errors.configProfile}
+                                errors={
+                                    form.errors.configProfile ?? form.errors.singBoxConfigProfile
+                                }
                                 onSaveInbounds={saveInbounds}
                             />
                         </motion.div>

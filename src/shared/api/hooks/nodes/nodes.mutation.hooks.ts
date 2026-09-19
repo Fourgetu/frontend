@@ -15,12 +15,18 @@ import {
 } from '@remnawave/backend-contract'
 import { z } from 'zod'
 
+import {
+    ConcurrentCreateNodeRequestBodySchema,
+    ConcurrentNodeResponseSchema,
+    ConcurrentUpdateNodeRequestBodySchema
+} from '@shared/api/types/concurrent-node.schema'
+
 import { createMutationHook } from '../../tsq-helpers'
 
 export const useCreateNode = createMutationHook({
     endpoint: CreateNodeCommand.TSQ_url,
-    bodySchema: CreateNodeCommand.RequestBodySchema,
-    responseSchema: CreateNodeCommand.ResponseSchema,
+    bodySchema: ConcurrentCreateNodeRequestBodySchema,
+    responseSchema: ConcurrentNodeResponseSchema,
     requestMethod: CreateNodeCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {
@@ -43,8 +49,8 @@ export const useCreateNode = createMutationHook({
 
 export const useUpdateNode = createMutationHook({
     endpoint: UpdateNodeCommand.TSQ_url,
-    bodySchema: UpdateNodeCommand.RequestBodySchema,
-    responseSchema: UpdateNodeCommand.ResponseSchema,
+    bodySchema: ConcurrentUpdateNodeRequestBodySchema,
+    responseSchema: ConcurrentNodeResponseSchema,
     requestMethod: UpdateNodeCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {

@@ -23,6 +23,7 @@ import {
     SimpleGrid,
     Stack,
     Tabs,
+    TagsInput,
     Text,
     TextInput,
     Textarea
@@ -202,6 +203,8 @@ export function RoutingVisualManager({
     const [editorIndex, setEditorIndex] = useState<number | null>(null)
     const [editorOpen, setEditorOpen] = useState(false)
     const [editorDraft, setEditorDraft] = useState<RuleDraft | null>(null)
+    const [editorJson, setEditorJson] = useState('')
+    const [editorJsonDirty, setEditorJsonDirty] = useState(false)
     const [addOpen, setAddOpen] = useState(false)
     const [templateId, setTemplateId] = useState('')
     const [templateTarget, setTemplateTarget] = useState('')
@@ -235,6 +238,8 @@ export function RoutingVisualManager({
     const openEditor = (rule: VisualRoutingRule) => {
         setEditorIndex(rule.index)
         setEditorDraft(getDraft(rule))
+        setEditorJson(JSON.stringify(rule.raw, null, 2))
+        setEditorJsonDirty(false)
         setEditorOpen(true)
     }
 
@@ -310,6 +315,35 @@ export function RoutingVisualManager({
     const saveEditor = () => {
         if (!editorRule || !editorDraft) return
         const index = editorRule.index
+        if (editorJsonDirty) {
+            try {
+                const parsed = JSON.parse(editorJson) as unknown
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    throw new Error(t('visual-config-builder.errors.json-object'))
+                }
+                onConfigChange(
+                    applyVisualPatch(config, {
+                        operations: [
+                            {
+                                op: 'set',
+                                path: [...rulesPath, index],
+                                value: parsed as JsonObject
+                            }
+                        ]
+                    }),
+                    t('visual-config-builder.routing.edited', { index: index + 1 })
+                )
+                setEditorOpen(false)
+                return
+            } catch (error) {
+                modals.open({
+                    title: t('visual-config-builder.routing.json-invalid'),
+                    children: error instanceof Error ? error.message : String(error),
+                    centered: true
+                })
+                return
+            }
+        }
         const operations: VisualPatchOperation[] = []
         const raw = editorRule.raw
         const setOrRemove = (
@@ -433,6 +467,7 @@ export function RoutingVisualManager({
                     {t('visual-config-builder.add-rule')}
                 </Button>
             </Group>
+            <Alert color="blue">{t('visual-config-builder.routing.order-warning')}</Alert>
             <DragDropProvider modifiers={[RestrictToVerticalAxis]} onDragEnd={handleDragEnd}>
                 <Stack>
                     {rows.map((item) => (
@@ -465,20 +500,12 @@ export function RoutingVisualManager({
                                 {t('visual-config-builder.routing.snippet-readonly')}
                             </Alert>
                         )}
-                        <Tabs defaultValue="basic">
+                        <Tabs defaultValue="basic" keepMounted={false}>
                             <Tabs.List>
                                 <Tabs.Tab value="basic">
                                     {t('visual-config-builder.routing.basic')}
                                 </Tabs.Tab>
-                                <Tabs.Tab value="match">
-                                    {t('visual-config-builder.routing.match')}
-                                </Tabs.Tab>
-                                <Tabs.Tab value="target">
-                                    {t('visual-config-builder.routing.target')}
-                                </Tabs.Tab>
-                                <Tabs.Tab value="advanced">
-                                    {t('visual-config-builder.routing.advanced')}
-                                </Tabs.Tab>
+                                <Tabs.Tab value="json">JSON</Tabs.Tab>
                             </Tabs.List>
                             <Tabs.Panel pt="md" value="basic">
                                 <TextInput
@@ -499,30 +526,32 @@ export function RoutingVisualManager({
                                     {t('visual-config-builder.routing.private-field-note')}
                                 </Text>
                             </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="match">
+                            <Tabs.Panel pt="md" value="basic">
                                 <Stack>
-                                    <Textarea
+                                    <TagsInput
                                         disabled={editorRule.readOnly}
                                         label={t('visual-config-builder.routing.domain')}
                                         description={t(
                                             'visual-config-builder.routing.multi-value-description'
                                         )}
-                                        value={editorDraft.domains}
-                                        onChange={(event) =>
+                                        splitChars={[',', '\n']}
+                                        value={splitValues(editorDraft.domains)}
+                                        onChange={(value) =>
                                             setEditorDraft({
                                                 ...editorDraft,
-                                                domains: event.currentTarget.value
+                                                domains: value.join('\n')
                                             })
                                         }
                                     />
-                                    <Textarea
+                                    <TagsInput
                                         disabled={editorRule.readOnly}
                                         label={t('visual-config-builder.routing.ip')}
-                                        value={editorDraft.ips}
-                                        onChange={(event) =>
+                                        splitChars={[',', '\n']}
+                                        value={splitValues(editorDraft.ips)}
+                                        onChange={(value) =>
                                             setEditorDraft({
                                                 ...editorDraft,
-                                                ips: event.currentTarget.value
+                                                ips: value.join('\n')
                                             })
                                         }
                                     />
@@ -586,27 +615,29 @@ export function RoutingVisualManager({
                                     />
                                     {coreType === 'xray' && (
                                         <>
-                                            <Textarea
+                                            <TagsInput
                                                 disabled={editorRule.readOnly}
                                                 label={t(
                                                     'visual-config-builder.routing.source-address'
                                                 )}
-                                                value={editorDraft.sources}
-                                                onChange={(event) =>
+                                                splitChars={[',', '\n']}
+                                                value={splitValues(editorDraft.sources)}
+                                                onChange={(value) =>
                                                     setEditorDraft({
                                                         ...editorDraft,
-                                                        sources: event.currentTarget.value
+                                                        sources: value.join('\n')
                                                     })
                                                 }
                                             />
-                                            <Textarea
+                                            <TagsInput
                                                 disabled={editorRule.readOnly}
                                                 label={t('visual-config-builder.routing.user')}
-                                                value={editorDraft.users}
-                                                onChange={(event) =>
+                                                splitChars={[',', '\n']}
+                                                value={splitValues(editorDraft.users)}
+                                                onChange={(value) =>
                                                     setEditorDraft({
                                                         ...editorDraft,
-                                                        users: event.currentTarget.value
+                                                        users: value.join('\n')
                                                     })
                                                 }
                                             />
@@ -614,7 +645,7 @@ export function RoutingVisualManager({
                                     )}
                                 </Stack>
                             </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="target">
+                            <Tabs.Panel pt="md" value="basic">
                                 <Stack>
                                     <Select
                                         disabled={editorRule.readOnly}
@@ -704,7 +735,7 @@ export function RoutingVisualManager({
                                     </Text>
                                 </Stack>
                             </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="advanced">
+                            <Tabs.Panel pt="md" value="basic">
                                 <Alert
                                     color="yellow"
                                     title={t('visual-config-builder.advanced-preserved')}
@@ -727,6 +758,24 @@ export function RoutingVisualManager({
                                         )}
                                     />
                                 )}
+                            </Tabs.Panel>
+                            <Tabs.Panel pt="md" value="json">
+                                <Stack>
+                                    <Alert color="yellow">
+                                        {t('visual-config-builder.routing.json-warning')}
+                                    </Alert>
+                                    <Textarea
+                                        autosize
+                                        disabled={editorRule.readOnly}
+                                        minRows={18}
+                                        styles={{ input: { fontFamily: 'monospace' } }}
+                                        value={editorJson}
+                                        onChange={(event) => {
+                                            setEditorJson(event.currentTarget.value)
+                                            setEditorJsonDirty(true)
+                                        }}
+                                    />
+                                </Stack>
                             </Tabs.Panel>
                         </Tabs>
                         <Group justify="flex-end">

@@ -1,13 +1,15 @@
+import type { ConcurrentProfileBindings } from '@features/dashboard/nodes/config-profile-selection/model/concurrent-profile-selection'
+
 import { ShowConfigProfilesWithInboundsFeature } from '@features/ui/dashboard/nodes/show-config-profiles-with-inbounds'
 import { Button, Group, Skeleton, Stack } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { CreateNodeCommand } from '@remnawave/backend-contract'
 import { useTranslation } from 'react-i18next'
 import { PiArrowLeft } from 'react-icons/pi'
 import { SiSecurityscorecard } from 'react-icons/si'
 import { TbCheck } from 'react-icons/tb'
 
 import { useGetConfigProfiles } from '@shared/api/hooks'
+import type { ConcurrentCreateNodeRequestBody } from '@shared/api/types/concurrent-node.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
@@ -15,7 +17,7 @@ import { CopyDockerComposeWidget } from './copy-docker-compose.widget'
 
 interface IProps {
     // oxlint-disable-next-line
-    form: UseFormReturnType<CreateNodeCommand.RequestBody, any>
+    form: UseFormReturnType<ConcurrentCreateNodeRequestBody, any>
     isCreating: boolean
     onCreateNode: () => void
     onPrev: () => void
@@ -33,35 +35,16 @@ export const CreateNodeStep2ConfigProfiles = ({
 
     const { data: configProfiles, isLoading: isConfigProfilesLoading } = useGetConfigProfiles()
 
-    const saveInbounds = (inbounds: string[], configProfileUuid: string) => {
-        form.setValues({
-            configProfile: {
-                activeInbounds: inbounds,
-                activeConfigProfileUuid: configProfileUuid
-            }
-        })
-        form.setTouched({
-            activeConfigProfileUuid: true,
-            activeInbounds: true
-        })
-        form.setDirty({
-            activeConfigProfileUuid: true,
-            activeInbounds: true
-        })
+    const saveInbounds = (bindings: ConcurrentProfileBindings) => {
+        form.setValues(bindings)
+        form.setTouched({ configProfile: true, singBoxConfigProfile: true })
+        form.setDirty({ configProfile: true, singBoxConfigProfile: true })
     }
 
     const handleCreateNode = () => {
-        const configProfileErrors = form.validateField('configProfile')
-        const activeConfigProfileUuidErrors = form.validateField(
-            'configProfile.activeConfigProfileUuid'
-        )
-        const activeInboundsErrors = form.validateField('configProfile.activeInbounds')
+        const validation = form.validate()
 
-        if (
-            !configProfileErrors.hasError &&
-            !activeConfigProfileUuidErrors.hasError &&
-            !activeInboundsErrors.hasError
-        ) {
+        if (!validation.hasErrors) {
             onCreateNode()
         }
     }
@@ -90,14 +73,12 @@ export const CreateNodeStep2ConfigProfiles = ({
 
                     {!isConfigProfilesLoading && configProfiles && (
                         <ShowConfigProfilesWithInboundsFeature
-                            activeConfigProfileInbounds={
-                                form.getValues().configProfile?.activeInbounds ?? []
-                            }
-                            activeConfigProfileUuid={
-                                form.getValues().configProfile?.activeConfigProfileUuid
-                            }
+                            activeConfigProfiles={{
+                                configProfile: form.getValues().configProfile ?? null,
+                                singBoxConfigProfile: form.getValues().singBoxConfigProfile ?? null
+                            }}
                             configProfiles={configProfiles.configProfiles}
-                            errors={form.errors.configProfile}
+                            errors={form.errors.configProfile ?? form.errors.singBoxConfigProfile}
                             onSaveInbounds={saveInbounds}
                         />
                     )}

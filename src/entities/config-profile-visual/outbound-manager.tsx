@@ -1,4 +1,10 @@
-import type { JsonObject, VisualCoreType, VisualDocument, VisualOutbound } from './types.ts'
+import type {
+    JsonObject,
+    VisualCoreType,
+    VisualDocument,
+    VisualOutbound,
+    VisualPatchOperation
+} from './types.ts'
 
 import {
     Alert,
@@ -14,6 +20,7 @@ import {
     Stack,
     Tabs,
     Text,
+    Textarea,
     TextInput
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
@@ -23,15 +30,21 @@ import { TbCopy, TbEdit, TbPlus, TbTrash } from 'react-icons/tb'
 
 import {
     applyVisualPatch,
+    adaptShareLinkToOutbound,
+    buildOutboundEditorOperations,
     cloneOutbound,
     createOutboundTemplate,
     getOutboundDisplay,
-    getOutboundEndpointPaths,
+    getOutboundEditorDraft,
     getOutboundReferences,
     getOutboundTemplateOptions,
     hasAdvancedOutboundSelectors,
     parseReferencePath,
+    parseShareLink,
+    suggestedShareLinkTag,
     validateOutboundCollection,
+    type NormalizedOutboundLink,
+    type OutboundEditorDraft,
     type OutboundTemplateId
 } from './index.ts'
 
@@ -42,11 +55,7 @@ type OutboundManagerProps = {
     onConfigChange: (config: JsonObject, description: string) => void
 }
 
-type EditorDraft = { tag: string; server: string; port: string }
-type AddDraft = EditorDraft & { templateId: string }
-
-const asString = (value: unknown): string =>
-    typeof value === 'number' || typeof value === 'string' ? String(value) : ''
+type AddDraft = { tag: string; server: string; port: string; templateId: string }
 
 const toPort = (value: string): number | undefined => {
     if (!value.trim()) return undefined
@@ -74,7 +83,11 @@ export function OutboundVisualManager({
     const outbounds = useMemo(() => document.outboundDetails, [document.outboundDetails])
     const [editorIndex, setEditorIndex] = useState<number | null>(null)
     const [editorOpen, setEditorOpen] = useState(false)
-    const [editorDraft, setEditorDraft] = useState<EditorDraft>({ tag: '', server: '', port: '' })
+    const [editorDraft, setEditorDraft] = useState<OutboundEditorDraft>(() =>
+        getOutboundEditorDraft({}, coreType)
+    )
+    const [editorJson, setEditorJson] = useState('')
+    const [editorJsonDirty, setEditorJsonDirty] = useState(false)
     const [addOpen, setAddOpen] = useState(false)
     const [addDraft, setAddDraft] = useState<AddDraft>({
         templateId: getOutboundTemplateOptions(coreType)[0]?.[0] ?? '',
@@ -82,9 +95,16 @@ export function OutboundVisualManager({
         server: '',
         port: ''
     })
+    const [addJson, setAddJson] = useState('')
+    const [addJsonDirty, setAddJsonDirty] = useState(false)
+    const [shareLink, setShareLink] = useState('')
+    const [sharePreview, setSharePreview] = useState<{
+        link: NormalizedOutboundLink
+        outbound: JsonObject
+    }>()
+    const [shareError, setShareError] = useState('')
 
     const editorOutbound = editorIndex === null ? undefined : outbounds[editorIndex]
-    const editorDisplay = editorOutbound ? getOutboundDisplay(editorOutbound) : undefined
     const editorReferences = editorOutbound ? getOutboundReferences(config, editorOutbound.tag) : []
     const hasAdvancedSelectors = hasAdvancedOutboundSelectors(config)
     const editorSnippetManaged = editorOutbound ? isSnippetManaged(editorOutbound) : false
@@ -104,11 +124,9 @@ export function OutboundVisualManager({
 
     const openEditor = (outbound: VisualOutbound) => {
         setEditorIndex(outbound.index)
-        setEditorDraft({
-            tag: outbound.tag,
-            server: outbound.server ?? '',
-            port: asString(outbound.port)
-        })
+        setEditorDraft(getOutboundEditorDraft(outbound.raw, coreType))
+        setEditorJson(JSON.stringify(outbound.raw, null, 2))
+        setEditorJsonDirty(false)
         setEditorOpen(true)
     }
 
@@ -120,6 +138,11 @@ export function OutboundVisualManager({
             server: '',
             port: ''
         }))
+        setShareLink('')
+        setSharePreview(undefined)
+        setShareError('')
+        setAddJson('')
+        setAddJsonDirty(false)
         setAddOpen(true)
     }
 
@@ -199,16 +222,31 @@ export function OutboundVisualManager({
 
     const saveEditor = () => {
         if (!editorOutbound || editorSnippetManaged) return
-        const candidate = cloneOutbound(editorOutbound.raw)
-        candidate.tag = editorDraft.tag.trim()
-        const endpointPaths = getOutboundEndpointPaths(editorOutbound.raw, coreType)
+        let candidate = cloneOutbound(editorOutbound.raw)
+        if (editorJsonDirty) {
+            try {
+                const parsed = JSON.parse(editorJson) as unknown
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    throw new Error(t('visual-config-builder.errors.json-object'))
+                }
+                candidate = parsed as JsonObject
+            } catch (error) {
+                modals.open({
+                    title: t('visual-config-builder.outbound.cannot-save'),
+                    children: error instanceof Error ? error.message : String(error),
+                    centered: true
+                })
+                return
+            }
+        } else candidate.tag = editorDraft.tag.trim()
         const port = editorDraft.port.trim() ? toPort(editorDraft.port) : undefined
         const errors = validateOutboundCollection(
             Array.isArray(config.outbounds) ? config.outbounds : [],
             candidate,
             { ignoreIndex: editorOutbound.index, existingTag: editorOutbound.tag }
         )
-        const renaming = editorDraft.tag.trim() !== editorOutbound.tag
+        const nextTagValue = typeof candidate.tag === 'string' ? candidate.tag.trim() : ''
+        const renaming = nextTagValue !== editorOutbound.tag
         const exactReferences = editorReferences.filter((reference) => reference.kind === 'routing')
         if (renaming && hasAdvancedSelectors) {
             errors.push(t('visual-config-builder.outbound.advanced-selector-rename'))
@@ -233,35 +271,20 @@ export function OutboundVisualManager({
             return
         }
 
-        const operations: Array<{ op: 'set'; path: Array<string | number>; value: unknown }> = []
-        if (editorDraft.tag.trim() !== editorOutbound.tag) {
-            operations.push({
-                op: 'set',
-                path: ['outbounds', editorOutbound.index, 'tag'],
-                value: editorDraft.tag.trim()
-            })
-        }
-        if (
-            endpointPaths.serverPath &&
-            editorDraft.server.trim() !== (editorOutbound.server ?? '')
-        ) {
-            operations.push({
-                op: 'set',
-                path: ['outbounds', editorOutbound.index, ...endpointPaths.serverPath],
-                value: editorDraft.server.trim()
-            })
-        }
-        if (
-            endpointPaths.portPath &&
-            port !== undefined &&
-            String(port) !== String(editorOutbound.port)
-        ) {
-            operations.push({
-                op: 'set',
-                path: ['outbounds', editorOutbound.index, ...endpointPaths.portPath],
-                value: port
-            })
-        }
+        const operations: VisualPatchOperation[] = editorJsonDirty
+            ? [
+                  {
+                      op: 'set',
+                      path: ['outbounds', editorOutbound.index],
+                      value: candidate
+                  }
+              ]
+            : buildOutboundEditorOperations(
+                  editorOutbound.raw,
+                  editorOutbound.index,
+                  coreType,
+                  editorDraft
+              )
         const commit = () => {
             const nextOperations = [...operations]
             if (renaming && exactReferences.length > 0) {
@@ -269,7 +292,7 @@ export function OutboundVisualManager({
                     nextOperations.push({
                         op: 'set',
                         path: parseReferencePath(reference.path),
-                        value: editorDraft.tag.trim()
+                        value: nextTagValue
                     })
                 })
             }
@@ -279,7 +302,7 @@ export function OutboundVisualManager({
                     renaming && exactReferences.length > 0
                         ? t('visual-config-builder.outbound.renamed', {
                               from: editorOutbound.tag,
-                              to: editorDraft.tag.trim(),
+                              to: nextTagValue,
                               count: exactReferences.length
                           })
                         : t('visual-config-builder.outbound.edited', { tag: editorOutbound.tag })
@@ -293,7 +316,7 @@ export function OutboundVisualManager({
                 children: (
                     <Stack gap="xs">
                         <Text>
-                            {editorOutbound.tag} → {editorDraft.tag.trim()}
+                            {editorOutbound.tag} → {nextTagValue}
                         </Text>
                         <Text size="sm">
                             {t('visual-config-builder.outbound.reference-update', {
@@ -320,13 +343,15 @@ export function OutboundVisualManager({
         try {
             const tag = addDraft.tag.trim() || `${addDraft.templateId}-outbound`
             const current = Array.isArray(config.outbounds) ? config.outbounds : []
-            const next = createOutboundTemplate(
-                coreType,
-                addDraft.templateId as OutboundTemplateId,
-                tag,
-                addDraft.server,
-                addDraft.port.trim() ? toPort(addDraft.port) : undefined
-            )
+            const next = addJsonDirty
+                ? (JSON.parse(addJson) as JsonObject)
+                : createOutboundTemplate(
+                      coreType,
+                      addDraft.templateId as OutboundTemplateId,
+                      tag,
+                      addDraft.server,
+                      addDraft.port.trim() ? toPort(addDraft.port) : undefined
+                  )
             const errors = validateOutboundCollection(current, next)
             if (errors.length) throw new Error(errors.join(' '))
             onConfigChange(
@@ -346,6 +371,43 @@ export function OutboundVisualManager({
                 centered: true
             })
         }
+    }
+
+    const previewShareImport = () => {
+        try {
+            const link = parseShareLink(shareLink)
+            const tags = new Set(outbounds.map((item) => item.tag))
+            const base = suggestedShareLinkTag(link)
+            let tag = base
+            let suffix = 2
+            while (tags.has(tag)) tag = `${base}-${suffix++}`
+            setSharePreview({ link, outbound: adaptShareLinkToOutbound(link, coreType, tag) })
+            setShareError('')
+        } catch (error) {
+            setSharePreview(undefined)
+            setShareError(error instanceof Error ? error.message : String(error))
+        }
+    }
+
+    const confirmShareImport = () => {
+        if (!sharePreview) return
+        const current = Array.isArray(config.outbounds) ? config.outbounds : []
+        const errors = validateOutboundCollection(current, sharePreview.outbound)
+        if (errors.length) {
+            setShareError(errors.map(localizeError).join(' '))
+            return
+        }
+        onConfigChange(
+            applyVisualPatch(config, {
+                operations: [
+                    { op: 'set', path: ['outbounds'], value: [...current, sharePreview.outbound] }
+                ]
+            }),
+            t('visual-config-builder.outbound.imported', {
+                tag: String(sharePreview.outbound.tag)
+            })
+        )
+        setAddOpen(false)
     }
 
     return (
@@ -490,20 +552,12 @@ export function OutboundVisualManager({
                                 ))}
                             </Alert>
                         )}
-                        <Tabs defaultValue="basic">
+                        <Tabs defaultValue="basic" keepMounted={false}>
                             <Tabs.List>
                                 <Tabs.Tab value="basic">
                                     {t('visual-config-builder.basic')}
                                 </Tabs.Tab>
-                                <Tabs.Tab value="server">
-                                    {t('visual-config-builder.server')}
-                                </Tabs.Tab>
-                                <Tabs.Tab value="transport">
-                                    {t('visual-config-builder.transport')}
-                                </Tabs.Tab>
-                                <Tabs.Tab value="advanced">
-                                    {t('visual-config-builder.advanced')}
-                                </Tabs.Tab>
+                                <Tabs.Tab value="json">JSON</Tabs.Tab>
                             </Tabs.List>
                             <Tabs.Panel pt="md" value="basic">
                                 <Stack>
@@ -521,67 +575,185 @@ export function OutboundVisualManager({
                                     <TextInput
                                         label={t('visual-config-builder.protocol-type')}
                                         readOnly
-                                        value={editorOutbound.protocol}
+                                        value={editorDraft.protocol}
                                     />
-                                </Stack>
-                            </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="server">
-                                <Stack>
-                                    <TextInput
+                                    <SimpleGrid cols={2}>
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.server-address')}
+                                            value={editorDraft.server}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    server: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <NumberInput
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.port')}
+                                            value={editorDraft.port}
+                                            onChange={(value) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    port: String(value)
+                                                })
+                                            }
+                                            min={1}
+                                            max={65_535}
+                                        />
+                                    </SimpleGrid>
+                                    <SimpleGrid cols={2}>
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.outbound.credential')}
+                                            value={editorDraft.credential}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    credential: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.outbound.password')}
+                                            type="password"
+                                            value={editorDraft.password}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    password: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.outbound.method')}
+                                            value={editorDraft.method}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    method: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label={t('visual-config-builder.transport')}
+                                            value={editorDraft.transport}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    transport: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                    </SimpleGrid>
+                                    <Select
                                         disabled={editorSnippetManaged}
-                                        label={t('visual-config-builder.server-address')}
-                                        value={editorDraft.server}
-                                        onChange={(event) =>
+                                        label={t('visual-config-builder.security')}
+                                        data={
+                                            coreType === 'xray'
+                                                ? ['none', 'tls', 'reality']
+                                                : ['none', 'tls', 'reality']
+                                        }
+                                        value={editorDraft.security}
+                                        onChange={(value) =>
                                             setEditorDraft({
                                                 ...editorDraft,
-                                                server: event.currentTarget.value
+                                                security:
+                                                    value === 'reality'
+                                                        ? 'reality'
+                                                        : value === 'tls'
+                                                          ? 'tls'
+                                                          : 'none'
                                             })
                                         }
                                     />
-                                    <NumberInput
-                                        disabled={editorSnippetManaged}
-                                        label={t('visual-config-builder.port')}
-                                        value={editorDraft.port}
-                                        onChange={(value) =>
-                                            setEditorDraft({ ...editorDraft, port: String(value) })
-                                        }
-                                        min={1}
-                                        max={65_535}
-                                    />
+                                    <SimpleGrid cols={2}>
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label="SNI"
+                                            value={editorDraft.sni}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    sni: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label="fingerprint / uTLS"
+                                            value={editorDraft.fingerprint}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    fingerprint: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label="flow"
+                                            value={editorDraft.flow}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    flow: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label={
+                                                coreType === 'xray'
+                                                    ? 'sendThrough'
+                                                    : 'bind_interface'
+                                            }
+                                            value={editorDraft.sendThrough}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    sendThrough: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <TextInput
+                                            disabled={editorSnippetManaged}
+                                            label="targetStrategy / domain_strategy"
+                                            value={editorDraft.targetStrategy}
+                                            onChange={(event) =>
+                                                setEditorDraft({
+                                                    ...editorDraft,
+                                                    targetStrategy: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                    </SimpleGrid>
                                     <Text c="dimmed" size="xs">
-                                        {t('visual-config-builder.outbound.endpoint-json-only')}
+                                        {t('visual-config-builder.outbound.advanced-preserved')}
                                     </Text>
                                 </Stack>
                             </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="transport">
-                                <Text>
-                                    {t('visual-config-builder.transport')}:{' '}
-                                    {editorDisplay?.transport ?? '—'}
-                                </Text>
-                                <Text>
-                                    {t('visual-config-builder.security')}:{' '}
-                                    {editorDisplay?.security ?? '—'}
-                                </Text>
-                                <Text c="dimmed" mt="xs" size="sm">
-                                    {t('visual-config-builder.outbound.transport-json-only')}
-                                </Text>
-                            </Tabs.Panel>
-                            <Tabs.Panel pt="md" value="advanced">
-                                <Alert
-                                    color="yellow"
-                                    title={t('visual-config-builder.advanced-detected')}
-                                >
-                                    {t('visual-config-builder.outbound.advanced-preserved')}
-                                </Alert>
-                                <Divider my="sm" />
-                                <Text size="sm">
-                                    {t('visual-config-builder.unknown-paths')}{' '}
-                                    {document.unknownFields
-                                        .filter((path) =>
-                                            path.startsWith(`outbounds[${editorOutbound.index}]`)
-                                        )
-                                        .join(', ') || t('visual-config-builder.none')}
-                                </Text>
+                            <Tabs.Panel pt="md" value="json">
+                                <Stack>
+                                    <Alert color="yellow">
+                                        {t('visual-config-builder.outbound.json-warning')}
+                                    </Alert>
+                                    <Textarea
+                                        autosize
+                                        disabled={editorSnippetManaged}
+                                        minRows={18}
+                                        styles={{ input: { fontFamily: 'monospace' } }}
+                                        value={editorJson}
+                                        onChange={(event) => {
+                                            setEditorJson(event.currentTarget.value)
+                                            setEditorJsonDirty(true)
+                                        }}
+                                    />
+                                </Stack>
                             </Tabs.Panel>
                         </Tabs>
                         <Group justify="flex-end">
@@ -607,46 +779,110 @@ export function OutboundVisualManager({
                     <Alert color="blue" title={coreType === 'xray' ? 'Xray' : 'sing-box'}>
                         {t('visual-config-builder.outbound.add-description')}
                     </Alert>
-                    <Select
-                        label={t('visual-config-builder.protocol-template')}
-                        data={getOutboundTemplateOptions(coreType).map(([value, label]) => ({
-                            value,
-                            label
-                        }))}
-                        value={addDraft.templateId}
-                        onChange={(value) => setAddDraft({ ...addDraft, templateId: value ?? '' })}
-                    />
-                    <TextInput
-                        label="Tag"
-                        value={addDraft.tag}
-                        onChange={(event) =>
-                            setAddDraft({ ...addDraft, tag: event.currentTarget.value })
-                        }
-                        placeholder={t('visual-config-builder.generated-from-template')}
-                    />
-                    {!['freedom', 'blackhole', 'direct', 'block'].includes(addDraft.templateId) && (
-                        <SimpleGrid cols={2}>
+                    <Stack gap="xs">
+                        <Text fw={600} size="sm">
+                            {t('visual-config-builder.outbound.share-import')}
+                        </Text>
+                        <Group align="flex-end" wrap="nowrap">
                             <TextInput
-                                label={t('visual-config-builder.server-address')}
-                                value={addDraft.server}
-                                onChange={(event) =>
-                                    setAddDraft({ ...addDraft, server: event.currentTarget.value })
-                                }
+                                flex={1}
+                                placeholder="vless:// / vmess:// / trojan:// / ss:// / hysteria2:// / hy2:// / tuic://"
+                                value={shareLink}
+                                onChange={(event) => setShareLink(event.currentTarget.value)}
                             />
-                            <NumberInput
-                                label={t('visual-config-builder.port')}
-                                value={addDraft.port}
-                                onChange={(value) =>
-                                    setAddDraft({ ...addDraft, port: String(value) })
-                                }
-                                min={1}
-                                max={65_535}
+                            <Button onClick={previewShareImport} variant="light">
+                                {t('visual-config-builder.outbound.import')}
+                            </Button>
+                        </Group>
+                        {shareError && <Alert color="red">{shareError}</Alert>}
+                        {sharePreview && (
+                            <Alert
+                                color="blue"
+                                title={t('visual-config-builder.outbound.import-preview')}
+                            >
+                                <Text size="sm">
+                                    {sharePreview.link.protocol} · {sharePreview.link.address}:
+                                    {sharePreview.link.port} · {sharePreview.link.security}
+                                </Text>
+                                <Text c="dimmed" size="xs">
+                                    {String(sharePreview.outbound.tag)}
+                                </Text>
+                                <Button mt="sm" onClick={confirmShareImport} size="xs">
+                                    {t('visual-config-builder.outbound.confirm-import')}
+                                </Button>
+                            </Alert>
+                        )}
+                    </Stack>
+                    <Divider />
+                    <Tabs defaultValue="basic" keepMounted={false}>
+                        <Tabs.List>
+                            <Tabs.Tab value="basic">{t('visual-config-builder.basic')}</Tabs.Tab>
+                            <Tabs.Tab value="json">JSON</Tabs.Tab>
+                        </Tabs.List>
+                        <Tabs.Panel pt="md" value="basic">
+                            <Stack>
+                                <Select
+                                    label={t('visual-config-builder.protocol-template')}
+                                    data={getOutboundTemplateOptions(coreType).map(
+                                        ([value, label]) => ({ value, label })
+                                    )}
+                                    value={addDraft.templateId}
+                                    onChange={(value) =>
+                                        setAddDraft({ ...addDraft, templateId: value ?? '' })
+                                    }
+                                />
+                                <TextInput
+                                    label="Tag"
+                                    value={addDraft.tag}
+                                    onChange={(event) =>
+                                        setAddDraft({ ...addDraft, tag: event.currentTarget.value })
+                                    }
+                                    placeholder={t('visual-config-builder.generated-from-template')}
+                                />
+                                {!['freedom', 'blackhole', 'direct', 'block'].includes(
+                                    addDraft.templateId
+                                ) && (
+                                    <SimpleGrid cols={2}>
+                                        <TextInput
+                                            label={t('visual-config-builder.server-address')}
+                                            value={addDraft.server}
+                                            onChange={(event) =>
+                                                setAddDraft({
+                                                    ...addDraft,
+                                                    server: event.currentTarget.value
+                                                })
+                                            }
+                                        />
+                                        <NumberInput
+                                            label={t('visual-config-builder.port')}
+                                            value={addDraft.port}
+                                            onChange={(value) =>
+                                                setAddDraft({ ...addDraft, port: String(value) })
+                                            }
+                                            min={1}
+                                            max={65_535}
+                                        />
+                                    </SimpleGrid>
+                                )}
+                                <Text c="dimmed" size="xs">
+                                    {t('visual-config-builder.outbound.credentials-json-only')}
+                                </Text>
+                            </Stack>
+                        </Tabs.Panel>
+                        <Tabs.Panel pt="md" value="json">
+                            <Textarea
+                                autosize
+                                minRows={16}
+                                placeholder={t('visual-config-builder.outbound.json-placeholder')}
+                                styles={{ input: { fontFamily: 'monospace' } }}
+                                value={addJson}
+                                onChange={(event) => {
+                                    setAddJson(event.currentTarget.value)
+                                    setAddJsonDirty(true)
+                                }}
                             />
-                        </SimpleGrid>
-                    )}
-                    <Text c="dimmed" size="xs">
-                        {t('visual-config-builder.outbound.credentials-json-only')}
-                    </Text>
+                        </Tabs.Panel>
+                    </Tabs>
                     <Group justify="flex-end">
                         <Button onClick={() => setAddOpen(false)} variant="default">
                             {t('visual-config-builder.cancel')}

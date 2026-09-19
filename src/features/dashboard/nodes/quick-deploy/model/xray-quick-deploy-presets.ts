@@ -1,5 +1,5 @@
-import type { QuickDeployProtocolId } from './core-capabilities.ts'
 import type { XrayInbound } from '../../../config-profiles/protocol-presets/model/protocol-presets.ts'
+import type { QuickDeployProtocolId } from './core-capabilities.ts'
 
 export interface BuiltXrayQuickDeployPreset {
     inbound: XrayInbound
@@ -60,7 +60,7 @@ export const appendXrayQuickDeployPresets = (
     ])
 
     const added = presetIds.map((presetId): BuiltXrayQuickDeployPreset => {
-        if (presetId !== 'xray-socks5') {
+        if (presetId !== 'xray-socks5' && presetId !== 'xray-mixed') {
             throw new Error(`Protocol ${presetId} does not have an Xray Quick Deploy builder.`)
         }
         let tag = `${presetId}-${randomToken()}`
@@ -74,12 +74,18 @@ export const appendXrayQuickDeployPresets = (
                 tag,
                 listen: '127.0.0.1',
                 port,
-                protocol: 'socks',
-                settings: { auth: 'password', accounts: [], udp: true },
+                protocol: presetId === 'xray-mixed' ? 'mixed' : 'socks',
+                settings:
+                    presetId === 'xray-mixed'
+                        ? { auth: 'noauth', udp: true, userLevel: 0 }
+                        : { auth: 'password', accounts: [], udp: true },
                 streamSettings: { network: 'raw', security: 'none' }
             }
         }
     })
 
-    return { config: { ...config, inbounds: [...inbounds, ...added.map((item) => item.inbound)] }, added }
+    return {
+        config: { ...config, inbounds: [...inbounds, ...added.map((item) => item.inbound)] },
+        added
+    }
 }

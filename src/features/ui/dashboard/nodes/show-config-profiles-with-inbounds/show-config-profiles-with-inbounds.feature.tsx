@@ -10,95 +10,117 @@ import { SectionCard } from '@shared/ui/section-card'
 import { IProps } from './interfaces'
 
 export function ShowConfigProfilesWithInboundsFeature(props: IProps) {
-    const {
-        activeConfigProfileInbounds,
-        activeConfigProfileUuid,
-        configProfiles,
-        onSaveInbounds,
-        errors
-    } = props
-
+    const { activeConfigProfiles, configProfiles, onSaveInbounds, errors } = props
     const { t } = useTranslation()
 
-    const activeProfile = configProfiles.find((profile) => profile.uuid === activeConfigProfileUuid)
+    const activeProfiles = useMemo(
+        () =>
+            (
+                [
+                    ['xray', activeConfigProfiles.configProfile],
+                    ['singbox', activeConfigProfiles.singBoxConfigProfile]
+                ] as const
+            ).flatMap(([coreType, binding]) => {
+                if (!binding) return []
 
-    const activeProfileInboundsPorts = useMemo(() => {
-        const ports = activeConfigProfileInbounds
-            ?.map((inbound) => {
-                const inboundConfig = activeProfile?.inbounds.find((i) => i.uuid === inbound)
-                return inboundConfig?.port ?? null
-            })
-            .filter((port) => port !== null)
+                const profile = configProfiles.find(
+                    (candidate) => candidate.uuid === binding.activeConfigProfileUuid
+                )
+                if (!profile) return []
 
-        return [...new Set(ports)]
-    }, [activeConfigProfileInbounds, activeProfile])
+                const ports = binding.activeInbounds
+                    .map((inboundUuid) =>
+                        profile.inbounds.find((inbound) => inbound.uuid === inboundUuid)
+                    )
+                    .map((inbound) => inbound?.port ?? null)
+                    .filter((port): port is number => port !== null)
 
-    const inboundsCount = activeConfigProfileInbounds?.length ?? 0
+                return [
+                    {
+                        binding,
+                        coreType,
+                        ports: [...new Set(ports)],
+                        profile
+                    }
+                ]
+            }),
+        [activeConfigProfiles, configProfiles]
+    )
+
     const hasError = Boolean(errors)
+    const openProfileDrawer = () =>
+        showModal('nodes_nodesConfigProfilesDrawer', {
+            activeConfigProfiles,
+            onSaveInbounds
+        })
 
     return (
         <SectionCard.Root
             style={hasError ? { borderColor: 'var(--mantine-color-red-5)' } : undefined}
         >
-            {activeProfile ? (
-                <SectionCard.Section>
-                    <Stack gap="sm">
-                        <Group gap="sm" justify="space-between" wrap="nowrap">
-                            <Group gap="sm" style={{ flex: 1, minWidth: 0 }} wrap="nowrap">
-                                <ThemeIcon color="cyan" size="lg" variant="soft">
-                                    <XrayLogo size={20} />
-                                </ThemeIcon>
-                                <Text ff="monospace" fw={600} size="sm" truncate>
-                                    {activeProfile.name}
-                                </Text>
-                            </Group>
-
-                            <Group gap="xs" style={{ flexShrink: 0 }} wrap="nowrap">
-                                <Badge
-                                    color="cyan"
-                                    leftSection={<TbTag size={12} />}
-                                    size="lg"
-                                    variant="light"
-                                >
-                                    {inboundsCount}
-                                </Badge>
-
-                                <Tooltip label={t('common.action.edit')}>
-                                    <ActionIcon
-                                        onClick={() =>
-                                            showModal('nodes_nodesConfigProfilesDrawer', {
-                                                activeConfigProfileInbounds:
-                                                    activeConfigProfileInbounds,
-                                                activeConfigProfileUuid: activeConfigProfileUuid,
-                                                onSaveInbounds: onSaveInbounds
-                                            })
-                                        }
+            {activeProfiles.length > 0 ? (
+                activeProfiles.map(({ binding, coreType, ports, profile }) => (
+                    <SectionCard.Section key={coreType}>
+                        <Stack gap="sm">
+                            <Group gap="sm" justify="space-between" wrap="nowrap">
+                                <Group gap="sm" style={{ flex: 1, minWidth: 0 }} wrap="nowrap">
+                                    <ThemeIcon
+                                        color={coreType === 'singbox' ? 'violet' : 'cyan'}
                                         size="lg"
-                                        variant="default"
+                                        variant="soft"
                                     >
-                                        <TbEdit size={18} />
-                                    </ActionIcon>
-                                </Tooltip>
-                            </Group>
-                        </Group>
+                                        <XrayLogo size={20} />
+                                    </ThemeIcon>
+                                    <Stack gap={2} style={{ minWidth: 0 }}>
+                                        <Text ff="monospace" fw={600} size="sm" truncate>
+                                            {profile.name}
+                                        </Text>
+                                        <Text c="dimmed" size="xs">
+                                            {coreType === 'singbox' ? 'sing-box' : 'Xray'}
+                                        </Text>
+                                    </Stack>
+                                </Group>
 
-                        {activeProfileInboundsPorts.length > 0 && (
-                            <Group gap={4}>
-                                {activeProfileInboundsPorts.map((port, index) => (
+                                <Group gap="xs" style={{ flexShrink: 0 }} wrap="nowrap">
                                     <Badge
-                                        color="gray"
-                                        key={`${port}-${index}`}
-                                        radius="sm"
-                                        size="sm"
-                                        variant="default"
+                                        color={coreType === 'singbox' ? 'violet' : 'cyan'}
+                                        leftSection={<TbTag size={12} />}
+                                        size="lg"
+                                        variant="light"
                                     >
-                                        {port}
+                                        {binding.activeInbounds.length}
                                     </Badge>
-                                ))}
+
+                                    <Tooltip label={t('common.action.edit')}>
+                                        <ActionIcon
+                                            onClick={openProfileDrawer}
+                                            size="lg"
+                                            variant="default"
+                                        >
+                                            <TbEdit size={18} />
+                                        </ActionIcon>
+                                    </Tooltip>
+                                </Group>
                             </Group>
-                        )}
-                    </Stack>
-                </SectionCard.Section>
+
+                            {ports.length > 0 && (
+                                <Group gap={4}>
+                                    {ports.map((port, index) => (
+                                        <Badge
+                                            color="gray"
+                                            key={`${port}-${index}`}
+                                            radius="sm"
+                                            size="sm"
+                                            variant="default"
+                                        >
+                                            {port}
+                                        </Badge>
+                                    ))}
+                                </Group>
+                            )}
+                        </Stack>
+                    </SectionCard.Section>
+                ))
             ) : (
                 <>
                     <SectionCard.Section>
@@ -126,13 +148,7 @@ export function ShowConfigProfilesWithInboundsFeature(props: IProps) {
                             color="cyan"
                             fullWidth
                             leftSection={<TbFilePlus size={16} />}
-                            onClick={() =>
-                                showModal('nodes_nodesConfigProfilesDrawer', {
-                                    activeConfigProfileInbounds: [],
-                                    activeConfigProfileUuid: undefined,
-                                    onSaveInbounds: onSaveInbounds
-                                })
-                            }
+                            onClick={openProfileDrawer}
                             size="sm"
                             variant="light"
                         >

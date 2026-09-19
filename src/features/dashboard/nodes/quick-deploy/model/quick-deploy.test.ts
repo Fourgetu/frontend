@@ -8,7 +8,7 @@ import {
     PROTOCOL_PRESETS,
     type XrayInbound
 } from '../../../config-profiles/protocol-presets/model/protocol-presets.ts'
-import { getQuickDeployCapability } from './core-capabilities.ts'
+import { getQuickDeployCapability, type QuickDeployProtocolId } from './core-capabilities.ts'
 import {
     createVirtualQuickDeployProfile,
     createQuickDeploymentPlan,
@@ -240,8 +240,8 @@ test('Quick Deploy creates a new Reality Inbound with minClientVer 1.8.1', async
 test('deploys all four supported protocols', async () => {
     const api = new FakeQuickDeployApi()
     const presetIds = PROTOCOL_PRESETS.filter(
-        (preset) => preset.recommended && preset.supported
-    ).map((preset) => preset.id)
+        (preset) => preset.id !== 'mixed' && preset.recommended && preset.supported
+    ).map((preset) => preset.id as QuickDeployProtocolId)
     const result = await executeQuickDeployment(planFor(api, { presetIds }), api)
 
     assert.equal(result.outcome, 'success')
@@ -678,4 +678,48 @@ test('experimental Xray SOCKS builder requires password auth and loopback GOST m
     assert.equal(inbound.settings.auth, 'password')
     assert.equal(inbound.settings.udp, true)
     assert.deepEqual(inbound.settings.accounts, [])
+})
+
+test('Mixed Quick Deploy creates and assigns Xray inbound while Host stays optional', async () => {
+    const api = new FakeQuickDeployApi()
+    const plan = planFor(api, {
+        presetIds: ['xray-mixed'],
+        hostAddress: '',
+        createOptionalHosts: false
+    })
+    const inbound = plan.inbounds[0].inbound as XrayInbound
+    assert.equal(inbound.protocol, 'mixed')
+    assert.equal(inbound.listen, '127.0.0.1')
+    assert.equal(plan.hosts[0].enabled, false)
+    assert.equal(plan.hosts[0].willCreateHost, false)
+
+    const result = await executeQuickDeployment(plan, api)
+    assert.equal(result.outcome, 'success')
+    assert.equal(api.node.configProfile.activeInbounds.length, 1)
+    assert.equal(api.hosts.length, 0)
+    assert.equal(result.hosts[0].status, 'skipped')
+})
+
+test('Mixed Quick Deploy can create a Host only after explicit opt-in', async () => {
+    const api = new FakeQuickDeployApi()
+    const plan = planFor(api, {
+        presetIds: ['xray-mixed'],
+        hostAddress: 'mixed.example.com',
+        createOptionalHosts: true
+    })
+    assert.equal(plan.hosts[0].enabled, true)
+    assert.equal(plan.hosts[0].willCreateHost, true)
+    await executeQuickDeployment(plan, api)
+    assert.equal(api.hosts.length, 1)
+})
+
+test('sing-box Mixed builder remains separate from Xray JSON', () => {
+    const result = appendSingBoxProtocolPresets(createMinimalSingBoxConfig(), ['singbox-mixed'], {
+        tls: TLS
+    })
+    const inbound = result.added[0].inbound
+    assert.equal(inbound.type, 'mixed')
+    assert.equal(inbound.listen, '127.0.0.1')
+    assert.deepEqual(inbound.users, [])
+    assert.equal((inbound as Record<string, unknown>).protocol, undefined)
 })

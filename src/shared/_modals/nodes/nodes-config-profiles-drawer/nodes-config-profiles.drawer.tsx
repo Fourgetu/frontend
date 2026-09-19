@@ -1,5 +1,14 @@
 import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import {
+    clearCoreProfileSelection,
+    ConcurrentProfileBindings,
+    createConcurrentProfileSelection,
+    getSelectedInboundUuids,
+    selectCoreProfileInbounds,
+    toConcurrentProfileBindings,
+    toggleCoreProfileInbound
+} from '@features/dashboard/nodes/config-profile-selection/model/concurrent-profile-selection'
+import {
     Accordion,
     ActionIcon,
     Box,
@@ -18,6 +27,7 @@ import { Virtuoso } from 'react-virtuoso'
 
 import { useNiceMantineModal } from '@shared/_modals/use-nice-modal'
 import { useGetConfigProfiles } from '@shared/api/hooks'
+import type { ConfigProfileCoreType } from '@shared/api/types/config-profile.type'
 import { ConfigProfileCardShared } from '@shared/ui/config-profiles/config-profile-card/config-profile-card.shared'
 import { XrayLogo } from '@shared/ui/logos'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
@@ -25,13 +35,13 @@ import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import classes from './nodes-config-profiles.module.css'
 
 interface IProps {
-    activeConfigProfileInbounds: null | string[] | undefined
-    activeConfigProfileUuid: null | string | undefined
-    onSaveInbounds: (inbounds: string[], configProfileUuid: string) => void
+    activeConfigProfiles: ConcurrentProfileBindings
+    allowedCoreTypes?: ConfigProfileCoreType[]
+    onSaveInbounds: (bindings: ConcurrentProfileBindings) => void
 }
 
 export const NodesConfigProfilesDrawer = NiceModal.create((props: IProps) => {
-    const { activeConfigProfileInbounds = [], activeConfigProfileUuid, onSaveInbounds } = props
+    const { activeConfigProfiles, allowedCoreTypes = ['xray', 'singbox'], onSaveInbounds } = props
     const { t } = useTranslation()
 
     const modal = useModal()
@@ -44,15 +54,19 @@ export const NodesConfigProfilesDrawer = NiceModal.create((props: IProps) => {
 
     const [searchQuery, setSearchQuery] = useState('')
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-    const [selectedInbounds, setSelectedInbounds] = useState<Set<string>>(
-        new Set(activeConfigProfileInbounds || [])
-    )
-    const [selectedProfileUuid, setSelectedProfileUuid] = useState<null | string>(
-        activeConfigProfileUuid || null
+    const [selection, setSelection] = useState(() =>
+        createConcurrentProfileSelection(activeConfigProfiles)
     )
     const [openAccordions, setOpenAccordions] = useState<Set<string>>(
-        new Set(activeConfigProfileUuid ? [activeConfigProfileUuid] : [])
+        new Set(
+            [
+                activeConfigProfiles.configProfile?.activeConfigProfileUuid,
+                activeConfigProfiles.singBoxConfigProfile?.activeConfigProfileUuid
+            ].filter((uuid): uuid is string => Boolean(uuid))
+        )
     )
+
+    const selectedInbounds = useMemo(() => getSelectedInboundUuids(selection), [selection])
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -65,12 +79,16 @@ export const NodesConfigProfilesDrawer = NiceModal.create((props: IProps) => {
     const filteredProfiles = useMemo(() => {
         if (!configProfiles || !configProfiles.configProfiles) return []
 
+        const availableProfiles = configProfiles.configProfiles.filter((profile) =>
+            allowedCoreTypes.includes(profile.coreType)
+        )
+
         if (!debouncedSearchQuery.trim()) {
-            return configProfiles.configProfiles
+            return availableProfiles
         }
 
         const query = debouncedSearchQuery.toLowerCase()
-        return configProfiles.configProfiles
+        return availableProfiles
             .filter((profile) => {
                 if (profile.name.toLowerCase().includes(query)) return true
                 return profile.inbounds.some(
@@ -88,64 +106,97 @@ export const NodesConfigProfilesDrawer = NiceModal.create((props: IProps) => {
                         inbound.type.toLowerCase().includes(query)
                 )
             }))
-    }, [configProfiles, debouncedSearchQuery])
+    }, [allowedCoreTypes, configProfiles, debouncedSearchQuery])
 
     const handleInboundToggle = useCallback(
         (
             inbound: GetConfigProfilesCommand.Response['response']['configProfiles'][number]['inbounds'][number]
         ) => {
-            const { profileUuid } = inbound
+            const profile = configProfiles?.configProfiles.find(
+                (candidate) => candidate.uuid === inbound.profileUuid
+            )
+            if (!profile) return
 
-            if (selectedProfileUuid && selectedProfileUuid !== profileUuid) {
-                setSelectedInbounds(new Set([inbound.uuid]))
-                setSelectedProfileUuid(profileUuid)
-                return
-            }
-
-            setSelectedInbounds((prev) => {
-                const next = new Set(prev)
-                if (next.has(inbound.uuid)) {
-                    next.delete(inbound.uuid)
-                    if (next.size === 0) {
-                        setSelectedProfileUuid(null)
-                    }
-                } else {
-                    next.add(inbound.uuid)
-                    setSelectedProfileUuid(profileUuid)
-                }
-                return next
-            })
+            setSelection((current) =>
+                toggleCoreProfileInbound(current, {
+                    coreType: profile.coreType,
+                    inboundUuid: inbound.uuid,
+                    profileUuid: profile.uuid
+                })
+            )
         },
-        [selectedProfileUuid]
+        [configProfiles]
     )
 
     const clearSelection = useCallback(() => {
-        setSelectedInbounds(new Set())
-        setSelectedProfileUuid(null)
+        setSelection(
+            createConcurrentProfileSelection({
+                configProfile: null,
+                singBoxConfigProfile: null
+            })
+        )
     }, [])
 
     const handleSaveInbounds = useCallback(() => {
-        if (!selectedProfileUuid) return
-        onSaveInbounds(Array.from(selectedInbounds), selectedProfileUuid)
+        if (selectedInbounds.size === 0) return
+        onSaveInbounds(toConcurrentProfileBindings(selection))
 
         hide()
-    }, [selectedInbounds, selectedProfileUuid, onSaveInbounds])
+    }, [hide, onSaveInbounds, selectedInbounds.size, selection])
 
     const handleSelectAllInbounds = useCallback(
         (profileUuid: string) => {
-            const profileInbounds = filteredProfiles
-                .find((p) => p.uuid === profileUuid)
-                ?.inbounds.map((i) => i.uuid)
-            setSelectedInbounds(new Set(profileInbounds))
-            setSelectedProfileUuid(profileUuid)
+            const profile = configProfiles?.configProfiles.find((p) => p.uuid === profileUuid)
+            if (!profile) return
+
+            setSelection((current) =>
+                selectCoreProfileInbounds(current, {
+                    coreType: profile.coreType,
+                    inboundUuids: profile.inbounds.map((inbound) => inbound.uuid),
+                    profileUuid
+                })
+            )
         },
-        [filteredProfiles]
+        [configProfiles]
     )
 
-    const handleUnselectAllInbounds = useCallback(() => {
-        setSelectedInbounds(new Set())
-        setSelectedProfileUuid(null)
-    }, [])
+    const handleUnselectAllInbounds = useCallback(
+        (profileUuid: string) => {
+            const profile = configProfiles?.configProfiles.find((p) => p.uuid === profileUuid)
+            if (!profile) return
+
+            setSelection((current) =>
+                clearCoreProfileSelection(
+                    current,
+                    profile.coreType as ConfigProfileCoreType,
+                    profileUuid
+                )
+            )
+        },
+        [configProfiles]
+    )
+
+    const selectedProfiles = useMemo(
+        () =>
+            (['xray', 'singbox'] as const).flatMap((coreType) => {
+                const coreSelection = selection[coreType]
+                if (!coreSelection.profileUuid) return []
+
+                const profile = configProfiles?.configProfiles.find(
+                    (candidate) => candidate.uuid === coreSelection.profileUuid
+                )
+                if (!profile) return []
+
+                return [
+                    {
+                        coreType,
+                        name: profile.name,
+                        selectedCount: coreSelection.inboundUuids.size
+                    }
+                ]
+            }),
+        [configProfiles, selection]
+    )
 
     if (isConfigProfilesLoading || !configProfiles) return null
 
@@ -182,20 +233,27 @@ export const NodesConfigProfilesDrawer = NiceModal.create((props: IProps) => {
                 >
                     <Group align="center" justify="space-between" wrap="nowrap">
                         <Box>
-                            {selectedInbounds.size > 0 && selectedProfileUuid ? (
-                                <>
-                                    <Text fw={700} size="sm">
-                                        {filteredProfiles.find(
-                                            (p) => p.uuid === selectedProfileUuid
-                                        )?.name ||
-                                            t('common.message.no-profile-selected')}
-                                    </Text>
-                                    <Text c="dimmed" size="xs">
-                                        {t('internal-squads.drawer.widget.selected-inbounds', {
-                                            count: selectedInbounds.size
-                                        })}
-                                    </Text>
-                                </>
+                            {selectedProfiles.length > 0 ? (
+                                <Stack gap={4}>
+                                    {selectedProfiles.map((profile) => (
+                                        <Box key={profile.coreType}>
+                                            <Text fw={700} size="sm">
+                                                {profile.name} ·{' '}
+                                                {profile.coreType === 'singbox'
+                                                    ? 'sing-box'
+                                                    : 'Xray'}
+                                            </Text>
+                                            <Text c="dimmed" size="xs">
+                                                {t(
+                                                    'internal-squads.drawer.widget.selected-inbounds',
+                                                    {
+                                                        count: profile.selectedCount
+                                                    }
+                                                )}
+                                            </Text>
+                                        </Box>
+                                    ))}
+                                </Stack>
                             ) : (
                                 <Box>
                                     <Text fw={700} size="sm">

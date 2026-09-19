@@ -4,50 +4,17 @@ import {
     GetNodeCommand,
     GetNodeSecretKeyCommand,
     GetNodesTagsCommand,
-    GetNodesCommand,
-    NodesSchema
+    GetNodesCommand
 } from '@remnawave/backend-contract'
 import { keepPreviousData } from '@tanstack/react-query'
-import { z } from 'zod'
 
+import {
+    ConcurrentNodeResponseSchema,
+    ConcurrentNodesResponseSchema
+} from '@shared/api/types/concurrent-node.schema'
 import { sToMs } from '@shared/utils/time-utils'
 
 import { createGetQueryHook, errorHandler } from '../../tsq-helpers'
-
-const concurrentNodeSchema = NodesSchema.extend({
-    configProfile: NodesSchema.shape.configProfile.extend({
-        activeSingBoxConfigProfileUuid: z.string().uuid().nullable()
-    }),
-    versions: z
-        .object({
-            xray: z.string(),
-            singbox: z.string().optional(),
-            gost: z.string().optional(),
-            node: z.string()
-        })
-        .nullable(),
-    runtimeHealth: z
-        .object({
-            observedAt: z.string(),
-            xray: z.object({
-                status: z.enum(['running', 'stopped', 'unavailable', 'unknown']),
-                version: z.string().nullable()
-            }),
-            singbox: z.object({
-                status: z.enum(['running', 'stopped', 'unavailable', 'unknown']),
-                version: z.string().nullable()
-            }),
-            gost: z.object({
-                status: z.enum(['running', 'stopped', 'unavailable', 'unknown']),
-                version: z.string().nullable(),
-                installed: z.boolean().nullable(),
-                services: z.number().nullable()
-            })
-        })
-        .nullable()
-})
-const concurrentNodesResponseSchema = z.object({ response: z.array(concurrentNodeSchema) })
-const concurrentNodeResponseSchema = z.object({ response: concurrentNodeSchema })
 
 export const nodesQueryKeys = createQueryKeys('nodes', {
     getAllNodes: {
@@ -69,7 +36,7 @@ export const nodesQueryKeys = createQueryKeys('nodes', {
 
 export const useGetNodes = createGetQueryHook({
     endpoint: GetNodesCommand.TSQ_url,
-    responseSchema: concurrentNodesResponseSchema,
+    responseSchema: ConcurrentNodesResponseSchema,
     getQueryKey: () => nodesQueryKeys.getAllNodes.queryKey,
     rQueryParams: {
         refetchOnMount: true,
@@ -80,7 +47,7 @@ export const useGetNodes = createGetQueryHook({
 
 export const useGetNode = createGetQueryHook({
     endpoint: GetNodeCommand.TSQ_url,
-    responseSchema: concurrentNodeResponseSchema,
+    responseSchema: ConcurrentNodeResponseSchema,
     routeParamsSchema: GetNodeCommand.RequestParamSchema,
     getQueryKey: ({ route }) => nodesQueryKeys.getNode(route!).queryKey,
     rQueryParams: {

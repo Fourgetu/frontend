@@ -19,6 +19,8 @@ interface ISchemaNode {
     anyOf?: ISchemaNode[]
     oneOf?: ISchemaNode[]
     properties?: Record<string, unknown>
+    enum?: unknown[]
+    const?: unknown
 }
 
 interface IXraySchema {
@@ -102,6 +104,32 @@ const injectProperty = (
         injected += injectProperty(branch, propertyName, propertySchema)
     }
 
+    return injected
+}
+
+export const injectXrayMixedProtocolSchema = (node: ISchemaNode | undefined): number => {
+    if (!node || typeof node !== 'object') return 0
+    let injected = 0
+    const protocol = node.properties?.protocol as ISchemaNode | undefined
+    if (protocol) {
+        if (Array.isArray(protocol.enum) && !protocol.enum.includes('mixed')) {
+            protocol.enum.push('mixed')
+            injected += 1
+        }
+        for (const variants of [protocol.anyOf, protocol.oneOf]) {
+            if (!variants || variants.some((variant) => variant.const === 'mixed')) continue
+            const socksVariant = variants.find(
+                (variant) => variant.const === 'socks' || variant.enum?.includes('socks')
+            )
+            if (socksVariant) {
+                variants.push({ const: 'mixed' })
+                injected += 1
+            }
+        }
+    }
+    for (const branch of [...(node.anyOf ?? []), ...(node.oneOf ?? []), ...(node.allOf ?? [])]) {
+        injected += injectXrayMixedProtocolSchema(branch)
+    }
     return injected
 }
 
@@ -219,6 +247,8 @@ export const MonacoSetupFeature = {
 
             const response = await axios.get(jsonSchemaUrl)
             const schema = response.data
+
+            injectXrayMixedProtocolSchema(schema.definitions?.InboundObject)
 
             const snippetDescriptions = snippets.map((snippet) => {
                 const snippetJson = JSON.stringify(snippet.snippet, null, 1)

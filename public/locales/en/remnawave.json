@@ -231,7 +231,8 @@
       "vless-reality-grpc": "Reality over gRPC with a random service name and no Vision flow.",
       "trojan-tcp-tls": "Classic Trojan over TCP and TLS using the mounted certificate files.",
       "vmess-ws-tls": "WebSocket over TLS for CDN-compatible deployments.",
-      "hysteria2": "QUIC/HTTP3 transport with h3 ALPN and a random Salamander obfuscation password."
+      "hysteria2": "QUIC/HTTP3 transport with h3 ALPN and a random Salamander obfuscation password.",
+      "mixed": "A combined SOCKS and HTTP listener. No standard client share link is generated."
     }
   },
   "quick-deploy": {
@@ -258,6 +259,8 @@
     "unsupported": "Unsupported",
     "vmess-disabled": "VMess WebSocket TLS remains disabled because Remnawave backend 3.4.x does not manage its Host and subscription output.",
     "host-address": "Public Host address / domain",
+    "create-optional-hosts": "Create Hosts for tool-style protocols",
+    "create-optional-hosts-description": "Mixed does not create a subscription Host by default. Enable this only when you intentionally need one.",
     "server-description": "Server description",
     "reality-settings": "Reality settings",
     "reality-target-domain": "REALITY target domain",
@@ -296,6 +299,7 @@
     "create": "Create",
     "save": "Save",
     "skip-existing": "Exists · skip",
+    "skip-optional": "Optional · skip",
     "no-runtime-ack-warning": "Remnawave queues Node configuration updates but exposes no reliable Xray runtime ACK. The result can confirm saved associations and current online state, not successful Xray parsing on the Node.",
     "confirm-deploy": "Confirm deployment",
     "back": "Back",
@@ -2320,6 +2324,18 @@
       "outbound-port-range": "Outbound port must be between 1 and 65535."
     },
     "inbound": {
+      "protocol-tab": "Protocol",
+      "sniffing": "Sniffing",
+      "auth": "Authentication",
+      "username": "Username",
+      "password": "Password",
+      "managed-protocol-fields": "Remnawave-managed user credentials remain unchanged. Protocol-specific fields not shown here are preserved for JSON mode.",
+      "header-type": "Header type",
+      "path": "Path",
+      "transport-core-note": "Only transport fields defined by the current sing-box inbound are editable. Other fields remain JSON-only.",
+      "reality-target": "Reality target / destination",
+      "maximum-client-version": "Maximum client version",
+      "sniff-enabled": "Enable sniffing",
       "list-description": "Core listening ports only. Public / NAT forwarding ports are managed separately by User Routes.",
       "empty": "No inbounds configured.",
       "snippet-managed": "Inbound is managed by a Snippet",
@@ -2342,6 +2358,16 @@
       "add-description": "New inbounds reuse the existing Protocol Preset / Quick Deploy builders. NAT and public ports are not part of this form."
     },
     "outbound": {
+      "share-import": "One-click protocol link import",
+      "import": "Import",
+      "import-preview": "Import preview",
+      "confirm-import": "Confirm import",
+      "imported": "Imported outbound {{tag}}",
+      "credential": "UUID / Username",
+      "password": "Password",
+      "method": "Encryption method",
+      "json-warning": "JSON editing replaces this outbound object only. Review advanced and unknown fields before applying.",
+      "json-placeholder": "Paste one complete outbound JSON object",
       "list-description": "Core outbound objects only. Routing and subscription references are protected.",
       "empty": "No outbounds configured.",
       "snippet-managed": "Outbound is managed by a Snippet",
@@ -2373,6 +2399,9 @@
       "credentials-json-only": "Proxy credentials and advanced transport fields remain JSON-only and are never auto-invented here."
     },
     "routing": {
+      "order-warning": "Routing rules match from top to bottom; the first matching rule takes effect.",
+      "json-warning": "JSON editing replaces this routing rule only. Unknown fields remain under your control.",
+      "json-invalid": "Invalid routing rule JSON",
       "list-description": "Rule order matches the Core array; existing rules use targeted patches.",
       "empty": "No routing rules configured.",
       "delete-description": "This only removes the Core routing rule and does not modify inbound, outbound, or NAT configuration.",

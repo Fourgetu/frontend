@@ -131,7 +131,21 @@ export const commonRuleTemplates = (coreType: VisualCoreType) =>
                   field: 'ip',
                   values: ['private']
               },
-              { id: 'bt-block', label: 'BT → 阻断', field: 'protocol', values: ['bittorrent'] }
+              { id: 'bt-block', label: 'BT → 阻断', field: 'protocol', values: ['bittorrent'] },
+              {
+                  id: 'domain-route',
+                  label: '指定域名 → 指定出站',
+                  field: 'domain',
+                  values: ['domain:example.com']
+              },
+              {
+                  id: 'ip-route',
+                  label: '指定 IP/CIDR → 指定出站',
+                  field: 'ip',
+                  values: ['1.1.1.1/32']
+              },
+              { id: 'tcp-route', label: 'TCP → 指定出站', field: 'network', values: ['tcp'] },
+              { id: 'udp-route', label: 'UDP → 指定出站', field: 'network', values: ['udp'] }
           ]
         : [
               { id: 'cn-direct', label: '中国 IP → 直接连接', field: 'ip', values: ['geoip:cn'] },
@@ -142,6 +156,26 @@ export const commonRuleTemplates = (coreType: VisualCoreType) =>
                   values: ['geoip:private']
               },
               { id: 'bt-block', label: 'BT → 阻断', field: 'protocol', values: ['bittorrent'] },
+              {
+                  id: 'ads-block',
+                  label: '广告拦截',
+                  field: 'domain',
+                  values: ['geosite:category-ads-all']
+              },
+              {
+                  id: 'domain-route',
+                  label: '指定域名 → 指定出站',
+                  field: 'domain',
+                  values: ['domain:example.com']
+              },
+              {
+                  id: 'ip-route',
+                  label: '指定 IP/CIDR → 指定出站',
+                  field: 'ip',
+                  values: ['1.1.1.1/32']
+              },
+              { id: 'tcp-route', label: 'TCP → 指定出站', field: 'network', values: ['tcp'] },
+              { id: 'udp-route', label: 'UDP → 指定出站', field: 'network', values: ['udp'] },
               {
                   id: 'netflix',
                   label: 'Netflix → 指定出口',

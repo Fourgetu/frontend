@@ -1,5 +1,5 @@
+import { createConcurrentProfileBindingsFromNode } from '@features/dashboard/nodes/config-profile-selection/model/concurrent-profile-selection'
 import { useForm, schemaResolver } from '@mantine/form'
-import { UpdateNodeCommand } from '@remnawave/backend-contract'
 import { NodeDetailsCardWidget } from '@widgets/dashboard/nodes/node-details-card'
 import { NodeSystemCardWidget } from '@widgets/dashboard/nodes/node-system-card'
 import { motion } from 'motion/react'
@@ -15,6 +15,10 @@ import {
     useGetNodeSecretKey,
     useUpdateNode
 } from '@shared/api/hooks'
+import {
+    ConcurrentUpdateNodeRequestBody,
+    ConcurrentUpdateNodeRequestBodySchema
+} from '@shared/api/types/concurrent-node.schema'
 import { BaseNodeForm } from '@shared/ui/forms/nodes/base-node-form/base-node-form'
 import { LoaderModalShared } from '@shared/ui/loader-modal'
 import { withNodeIpsErrors } from '@shared/ui/node-ips'
@@ -29,7 +33,7 @@ export const EditNodeByUuidModalContent = (props: IProps) => {
 
     const isFormInitialized = useRef(false)
 
-    const form = useForm<UpdateNodeCommand.RequestBody>({
+    const form = useForm<ConcurrentUpdateNodeRequestBody>({
         name: 'edit-node-form',
         mode: 'uncontrolled',
         onValuesChange: (values) => {
@@ -38,7 +42,7 @@ export const EditNodeByUuidModalContent = (props: IProps) => {
             }
         },
         validate: withNodeIpsErrors(
-            schemaResolver(UpdateNodeCommand.RequestBodySchema.omit({ uuid: true }))
+            schemaResolver(ConcurrentUpdateNodeRequestBodySchema.omit({ uuid: true }))
         )
     })
 
@@ -80,6 +84,10 @@ export const EditNodeByUuidModalContent = (props: IProps) => {
     useEffect(() => {
         if (fetchedNode && !isFormInitialized.current) {
             isFormInitialized.current = true
+            const profileBindings = createConcurrentProfileBindingsFromNode(
+                fetchedNode.configProfile
+            )
+
             form.initialize({
                 uuid: fetchedNode.uuid,
                 countryCode: fetchedNode.countryCode,
@@ -96,13 +104,7 @@ export const EditNodeByUuidModalContent = (props: IProps) => {
                 integrationUuids: fetchedNode.integrationUuids ?? [],
                 ips: fetchedNode.ips ?? [],
                 proxyUrl: fetchedNode.proxyUrl ?? undefined,
-                configProfile: {
-                    activeConfigProfileUuid:
-                        fetchedNode.configProfile.activeConfigProfileUuid ?? '',
-                    activeInbounds:
-                        fetchedNode.configProfile.activeInbounds.map((inbound) => inbound.uuid) ??
-                        []
-                },
+                ...profileBindings,
 
                 providerUuid: fetchedNode.providerUuid ?? undefined,
                 activePluginUuid: fetchedNode.activePluginUuid ?? undefined,
@@ -121,11 +123,7 @@ export const EditNodeByUuidModalContent = (props: IProps) => {
                 ...values,
                 name: values.name?.trim(),
                 address: values.address?.trim(),
-                trafficLimitBytes: values.trafficLimitBytes,
-                configProfile: {
-                    activeConfigProfileUuid: values.configProfile?.activeConfigProfileUuid ?? '',
-                    activeInbounds: values.configProfile?.activeInbounds ?? []
-                }
+                trafficLimitBytes: values.trafficLimitBytes
             }
         })
     })
