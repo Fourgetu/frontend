@@ -4,6 +4,7 @@ import { t } from 'i18next'
 import { z } from 'zod'
 
 import { createGetQueryHook, createMutationHook, errorHandler } from '../../tsq-helpers'
+import { createUserRouteMutationCallbacks } from './user-route-mutation-feedback'
 
 export const userRouteSchema = z.object({
     uuid: z.uuid(),
@@ -170,16 +171,11 @@ export const useCreateUserRoute = createMutationHook({
     requestMethod: 'post',
     bodySchema: createRouteBodySchema,
     responseSchema: routeResponseSchema,
-    rMutationParams: {
-        onSuccess: (data, variables, context, queryClient) => {
-            invalidateRoutes(data, variables, context, queryClient)
-            notifications.show({
-                color: 'teal',
-                title: t('speed-limits.api.runtime-confirmed'),
-                message: t('speed-limits.api.route-created')
-            })
-        }
-    }
+    rMutationParams: createUserRouteMutationCallbacks({
+        invalidateRoutes,
+        notify: (notification) => notifications.show({ ...notification }),
+        translate: (key) => t(key)
+    })
 })
 
 export const useUpdateUserRoute = createMutationHook({
