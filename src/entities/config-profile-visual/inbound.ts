@@ -27,9 +27,14 @@ const inboundPort = (value: unknown): number | undefined => {
     return typeof port === 'number' && Number.isInteger(port) ? port : undefined
 }
 
-const inboundNetwork = (value: unknown): 'tcp' | 'udp' => {
-    if (!isObject(value)) return 'tcp'
+const inboundNetworks = (value: unknown): ('tcp' | 'udp')[] => {
+    if (!isObject(value)) return ['tcp']
     const protocol = String(value.protocol ?? value.type ?? '').toLowerCase()
+    if (protocol === 'shadowsocks') {
+        const settings = isObject(value.settings) ? value.settings : {}
+        const network = value.type ? value.network : settings.network
+        return network === 'tcp' || network === 'udp' ? [network] : ['tcp', 'udp']
+    }
     const streamSettings = isObject(value.streamSettings) ? value.streamSettings : undefined
     const network = String(streamSettings?.network ?? '').toLowerCase()
     return protocol.includes('hysteria') ||
@@ -37,8 +42,8 @@ const inboundNetwork = (value: unknown): 'tcp' | 'udp' => {
         network.includes('quic') ||
         network.includes('kcp') ||
         network.includes('hysteria')
-        ? 'udp'
-        : 'tcp'
+        ? ['udp']
+        : ['tcp']
 }
 
 const addressesOverlap = (left: string, right: string): boolean =>
@@ -52,12 +57,13 @@ export const getInboundPortConflict = (
     const port = inboundPort(candidate)
     if (port === undefined) return undefined
     const listen = normalizedListen(candidate.listen)
-    const network = inboundNetwork(candidate)
+    const networks = inboundNetworks(candidate)
     for (let index = 0; index < rawInbounds.length; index += 1) {
         if (index === ignoreIndex) continue
         const other = rawInbounds[index]
         if (!isObject(other) || inboundPort(other) !== port) continue
-        if (inboundNetwork(other) !== network) continue
+        const network = inboundNetworks(other).find((value) => networks.includes(value))
+        if (!network) continue
         if (addressesOverlap(listen, normalizedListen(other.listen))) {
             const tag = typeof other.tag === 'string' ? other.tag : `Inbound #${index + 1}`
             return `${network.toUpperCase()} ${listen}:${port} conflicts with ${tag}.`
@@ -108,6 +114,8 @@ export const createInboundFromProtocolPreset = (
         return result.added[0].inbound
     }
     const result = appendSingBoxProtocolPresets(rawConfig, [presetId as never], {
+        reality: options.reality,
+        ss2022Method: options.ss2022Method,
         reservedTags: [],
         reservedPorts: [],
         tls: options.singboxTls ?? {

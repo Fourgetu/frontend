@@ -46,6 +46,9 @@ test('maps Hysteria to UDP and transparent Xray protocols to TCP', () => {
     assert.equal(getGostForwardNetwork('Hysteria2'), 'udp')
     assert.equal(getGostForwardNetwork('vless'), 'tcp')
     assert.equal(getGostForwardNetwork('trojan'), 'tcp')
+    assert.equal(getGostForwardNetwork('shadowsocks'), 'tcp,udp')
+    assert.equal(getGostForwardNetwork('shadowsocks', 'tcp'), 'tcp')
+    assert.equal(getGostForwardNetwork('shadowsocks', 'udp'), 'udp')
 })
 
 const XRAY_PROFILE_UUID = '00000000-0000-4000-8000-000000000001'
@@ -284,13 +287,21 @@ test('public Xray compatibility is opt-in, requires acknowledgement and uses IPv
     assert.equal(resolveGostTargetAddress('::1', 'xray'), '::1')
 })
 
-test('public compatibility does not permit unknown/sing-box cores or arbitrary listen addresses', () => {
-    for (const coreType of [undefined, 'singbox', 'unknown']) {
+test('public compatibility does not permit unknown cores or arbitrary listen addresses', () => {
+    for (const coreType of [undefined, 'unknown']) {
         assert.equal(isPublicInboundCompatibilityAvailable(coreType, '0.0.0.0'), false)
         assert.equal(resolveGostTargetAddress('0.0.0.0', coreType, true), undefined)
     }
-    for (const listen of [undefined, '', '::', '192.0.2.1', 'localhost']) {
+    for (const listen of [undefined, '', '192.0.2.1', 'localhost']) {
         assert.equal(isPublicInboundCompatibilityAvailable('xray', listen), false)
         assert.equal(resolveGostTargetAddress(listen, 'xray', true), undefined)
+    }
+})
+
+test('both cores wildcard listeners require opt-in and select matching loopback family', () => {
+    for (const core of ['xray', 'singbox']) {
+        assert.equal(resolveGostTargetAddress('0.0.0.0', core, true), '127.0.0.1')
+        assert.equal(resolveGostTargetAddress('::', core, true), '::1')
+        assert.equal(resolveGostTargetAddress('::', core, false), undefined)
     }
 })

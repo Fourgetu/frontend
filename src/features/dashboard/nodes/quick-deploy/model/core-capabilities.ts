@@ -1,9 +1,14 @@
+import { getProtocolPipeline } from '../../../config-profiles/protocol-presets/model/dual-core-capabilities.ts'
+
 export type ProxyCoreType = 'xray' | 'singbox'
 
 export type QuickDeployCapabilityStatus = 'experimental' | 'supported' | 'unsupported'
 export type QuickDeployAvailability = 'disabled' | 'enabled' | 'hidden'
 
 export type QuickDeployProtocolId =
+    | 'shadowsocks-2022'
+    | 'singbox-shadowsocks-2022'
+    | 'singbox-vless-reality-vision'
     | 'vless-reality-vision'
     | 'vless-reality-grpc'
     | 'trojan-tcp-tls'
@@ -38,7 +43,43 @@ export interface CoreCapability {
  * UI components consume this table; they must not independently decide whether
  * an unverified protocol is available.
  */
-export const CORE_CAPABILITIES: readonly CoreCapability[] = [
+const CORE_ENTRIES: readonly CoreCapability[] = [
+    {
+        id: 'shadowsocks-2022',
+        coreType: 'xray',
+        title: 'Shadowsocks 2022',
+        transport: 'TCP + UDP',
+        security: 'AEAD 2022',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: false,
+        status: 'supported',
+        availability: 'enabled'
+    },
+    {
+        id: 'singbox-shadowsocks-2022',
+        coreType: 'singbox',
+        title: 'Shadowsocks 2022',
+        transport: 'TCP + UDP',
+        security: 'AEAD 2022',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: false,
+        status: 'supported',
+        availability: 'enabled'
+    },
+    {
+        id: 'singbox-vless-reality-vision',
+        coreType: 'singbox',
+        title: 'VLESS Reality Vision',
+        transport: 'TCP',
+        security: 'Reality',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: true,
+        status: 'supported',
+        availability: 'enabled'
+    },
     {
         id: 'vless-reality-vision',
         coreType: 'xray',
@@ -83,9 +124,9 @@ export const CORE_CAPABILITIES: readonly CoreCapability[] = [
         security: 'TLS',
         needsDomain: true,
         needsCertificate: true,
-        recommended: true,
-        status: 'supported',
-        availability: 'enabled'
+        recommended: false,
+        status: 'unsupported',
+        availability: 'hidden'
     },
     {
         id: 'vmess-ws-tls',
@@ -200,6 +241,13 @@ export const CORE_CAPABILITIES: readonly CoreCapability[] = [
         availability: 'hidden'
     }
 ] as const
+
+export const CORE_CAPABILITIES: readonly CoreCapability[] = CORE_ENTRIES.map((capability) => {
+    const pipeline = getProtocolPipeline(capability.coreType, capability.id)
+    return pipeline && !pipeline.quickDeploy
+        ? { ...capability, availability: 'hidden', status: 'unsupported', recommended: false }
+        : capability
+})
 
 export const getCoreCapabilities = (
     coreType: ProxyCoreType,

@@ -53,6 +53,39 @@ const PARAMETERS: QuickDeployParameters = {
     serverDescription: 'Primary edge'
 }
 
+for (const coreType of ['xray', 'singbox'] as const) {
+    for (const method of ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm'] as const) {
+        test(`Quick Deploy ${coreType} ${method}: correct profile, native inbound and Host port`, () => {
+            const api = new FakeQuickDeployApi()
+            const profile =
+                coreType === 'xray'
+                    ? api.profile
+                    : { ...api.profile, coreType, config: createMinimalSingBoxConfig() }
+            const plan = createQuickDeploymentPlan({
+                node: api.node,
+                profile,
+                allProfiles: [profile],
+                hosts: [],
+                parameters: {
+                    ...PARAMETERS,
+                    coreType,
+                    ss2022Method: method,
+                    presetIds: [
+                        coreType === 'xray' ? 'shadowsocks-2022' : 'singbox-shadowsocks-2022'
+                    ]
+                }
+            })
+            const inbound = plan.inbounds[0].inbound
+            const fields =
+                coreType === 'xray' ? (inbound.settings as Record<string, unknown>) : inbound
+            assert.equal(fields.method, method)
+            assert.equal(plan.inbounds[0].willCreateInbound, true)
+            assert.equal(plan.inbounds[0].preset.coreType, coreType)
+            assert.equal('streamSettings' in inbound, coreType === 'xray')
+        })
+    }
+}
+
 const toInboundRecord = (
     inbound: XrayInbound,
     uuid: string,
@@ -241,7 +274,7 @@ test('Quick Deploy creates a new Reality Inbound with minClientVer 1.8.1', async
     )
 })
 
-test('deploys all four supported protocols', async () => {
+test('deploys all supported Xray recommendations without expanding HY2', async () => {
     const api = new FakeQuickDeployApi()
     const presetIds = PROTOCOL_PRESETS.filter(
         (preset) => preset.id !== 'mixed' && preset.recommended && preset.supported
@@ -249,9 +282,9 @@ test('deploys all four supported protocols', async () => {
     const result = await executeQuickDeployment(planFor(api, { presetIds }), api)
 
     assert.equal(result.outcome, 'success')
-    assert.equal(api.profile.inbounds.length, 4)
-    assert.equal(api.node.configProfile.activeInbounds.length, 4)
-    assert.equal(api.hosts.length, 4)
+    assert.equal(api.profile.inbounds.length, 3)
+    assert.equal(api.node.configProfile.activeInbounds.length, 3)
+    assert.equal(api.hosts.length, 3)
 })
 
 test('preserves Profile Inbounds that existed before deployment', async () => {
@@ -355,16 +388,11 @@ test('blocks Trojan TLS deployment when its domain is missing', () => {
     )
 })
 
-test('creates Hysteria2 Host data used by current generators', async () => {
+test('Xray Hysteria2 provisioning stays closed without mutating profiles or Hosts', () => {
     const api = new FakeQuickDeployApi()
-
-    await executeQuickDeployment(planFor(api, { presetIds: ['hysteria2'] }), api)
-
-    const raw = api.profile.inbounds[0].rawInbound as XrayInbound
-    assert.equal(api.hostBodies[0].alpn, 'h3')
-    assert.equal(api.hostBodies[0].sni, TLS.domain)
-    assert.equal((raw.settings as { version: number }).version, 2)
-    assert.ok((raw.streamSettings.finalmask as { udp: unknown[] }).udp.length > 0)
+    assert.throws(() => planFor(api, { presetIds: ['hysteria2'] }), /not supported/)
+    assert.equal(api.calls.updateProfile, 0)
+    assert.equal(api.calls.createHost, 0)
 })
 
 test('a second identical deployment creates no duplicate Inbound or Host', async () => {
@@ -513,111 +541,144 @@ const toSingBoxInboundRecord = (
     rawInbound: inbound
 })
 
-test('first sing-box Quick Deploy auto-creates and binds only the sing-box Profile slot', async () => {
-    const xrayInbound = toInboundRecord(manualInbound(), 'xray-inbound', 'xray-profile')
-    const node: QuickDeployNode = {
-        uuid: 'node-1',
-        name: 'Node One',
-        address: '203.0.113.10',
-        isConnected: true,
-        isDisabled: false,
-        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-        configProfile: {
-            activeConfigProfileUuid: 'xray-profile',
-            activeSingBoxConfigProfileUuid: null,
-            activeInbounds: [xrayInbound]
+for (const presetId of [
+    'singbox-hysteria2',
+    'singbox-vless-reality-vision',
+    'singbox-shadowsocks-2022'
+] as const) {
+    test(`first ${presetId} Quick Deploy creates Host and preserves the Xray Profile slot`, async () => {
+        const xrayInbound = toInboundRecord(manualInbound(), 'xray-inbound', 'xray-profile')
+        const node: QuickDeployNode = {
+            uuid: 'node-1',
+            name: 'Node One',
+            address: '203.0.113.10',
+            isConnected: true,
+            isDisabled: false,
+            updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+            configProfile: {
+                activeConfigProfileUuid: 'xray-profile',
+                activeSingBoxConfigProfileUuid: null,
+                activeInbounds: [xrayInbound]
+            }
         }
-    }
-    let createdProfile: QuickDeployProfile | undefined
-    const createdHosts: QuickDeployHost[] = []
-    let createProfileCalls = 0
-    let updateProfileCalls = 0
+        let createdProfile: QuickDeployProfile | undefined
+        const createdHosts: QuickDeployHost[] = []
+        let createProfileCalls = 0
+        let updateProfileCalls = 0
 
-    const api: QuickDeployApi = {
-        getNode: async () => structuredClone(node),
-        getProfiles: async () => (createdProfile ? [structuredClone(createdProfile)] : []),
-        getProfile: async () => {
-            if (!createdProfile) throw new Error('Profile not found')
-            return structuredClone(createdProfile)
-        },
-        getHosts: async () => structuredClone(createdHosts),
-        createProfile: async (body) => {
-            createProfileCalls += 1
-            const inbounds = (body.config.inbounds as SingBoxInbound[]).map((inbound, index) =>
-                toSingBoxInboundRecord(inbound, `singbox-inbound-${index + 1}`, 'singbox-profile')
-            )
-            createdProfile = {
-                uuid: 'singbox-profile',
-                name: body.name,
-                coreType: body.coreType,
-                config: structuredClone(body.config),
-                inbounds,
-                updatedAt: new Date('2026-01-01T00:01:00.000Z')
-            }
-            return structuredClone(createdProfile)
-        },
-        updateProfile: async () => {
-            updateProfileCalls += 1
-            throw new Error('Auto-created profile must not be patched a second time.')
-        },
-        updateNode: async (body) => {
-            if (!body.singBoxConfigProfile || !createdProfile) {
-                throw new Error('Expected a sing-box profile binding.')
-            }
-            node.configProfile.activeSingBoxConfigProfileUuid =
-                body.singBoxConfigProfile.activeConfigProfileUuid
-            node.configProfile.activeInbounds = [
-                xrayInbound,
-                ...createdProfile.inbounds.filter((inbound) =>
-                    body.singBoxConfigProfile!.activeInbounds.includes(inbound.uuid)
+        const api: QuickDeployApi = {
+            getNode: async () => structuredClone(node),
+            getProfiles: async () => (createdProfile ? [structuredClone(createdProfile)] : []),
+            getProfile: async () => {
+                if (!createdProfile) throw new Error('Profile not found')
+                return structuredClone(createdProfile)
+            },
+            getHosts: async () => structuredClone(createdHosts),
+            createProfile: async (body) => {
+                createProfileCalls += 1
+                const inbounds = (body.config.inbounds as SingBoxInbound[]).map((inbound, index) =>
+                    toSingBoxInboundRecord(
+                        inbound,
+                        `singbox-inbound-${index + 1}`,
+                        'singbox-profile'
+                    )
                 )
-            ]
-            return structuredClone(node)
-        },
-        createHost: async (body) => {
-            const host: QuickDeployHost = {
-                uuid: 'singbox-host',
-                remark: body.remark,
-                address: body.address,
-                port: body.port,
-                inbound: body.inbound,
-                nodes: body.nodes ?? []
+                createdProfile = {
+                    uuid: 'singbox-profile',
+                    name: body.name,
+                    coreType: body.coreType,
+                    config: structuredClone(body.config),
+                    inbounds,
+                    updatedAt: new Date('2026-01-01T00:01:00.000Z')
+                }
+                return structuredClone(createdProfile)
+            },
+            updateProfile: async () => {
+                updateProfileCalls += 1
+                throw new Error('Auto-created profile must not be patched a second time.')
+            },
+            updateNode: async (body) => {
+                if (!body.singBoxConfigProfile || !createdProfile) {
+                    throw new Error('Expected a sing-box profile binding.')
+                }
+                node.configProfile.activeSingBoxConfigProfileUuid =
+                    body.singBoxConfigProfile.activeConfigProfileUuid
+                node.configProfile.activeInbounds = [
+                    xrayInbound,
+                    ...createdProfile.inbounds.filter((inbound) =>
+                        body.singBoxConfigProfile!.activeInbounds.includes(inbound.uuid)
+                    )
+                ]
+                return structuredClone(node)
+            },
+            createHost: async (body) => {
+                const host: QuickDeployHost = {
+                    uuid: 'singbox-host',
+                    remark: body.remark,
+                    address: body.address,
+                    port: body.port,
+                    inbound: body.inbound,
+                    nodes: body.nodes ?? []
+                }
+                createdHosts.push(host)
+                return structuredClone(host)
             }
-            createdHosts.push(host)
-            return structuredClone(host)
         }
-    }
 
-    const profile = createVirtualQuickDeployProfile('singbox', node)
-    const parameters: QuickDeployParameters = {
-        ...PARAMETERS,
-        coreType: 'singbox',
-        profileUuid: profile.uuid,
-        presetIds: ['singbox-hysteria2']
-    }
-    const plan = createQuickDeploymentPlan({
-        node: structuredClone(node),
-        profile,
-        allProfiles: [],
-        hosts: [],
-        parameters
+        const profile = createVirtualQuickDeployProfile('singbox', node)
+        const parameters: QuickDeployParameters = {
+            ...PARAMETERS,
+            coreType: 'singbox',
+            profileUuid: profile.uuid,
+            presetIds: [presetId]
+        }
+        const plan = createQuickDeploymentPlan({
+            node: structuredClone(node),
+            profile,
+            allProfiles: [],
+            hosts: [],
+            parameters
+        })
+        const inbound = plan.inbounds[0].inbound as SingBoxInbound
+        assert.equal(
+            inbound.type,
+            presetId === 'singbox-hysteria2'
+                ? 'hysteria2'
+                : presetId === 'singbox-vless-reality-vision'
+                  ? 'vless'
+                  : 'shadowsocks'
+        )
+        assert.equal(inbound.listen, '127.0.0.1')
+        if (inbound.type !== 'shadowsocks')
+            assert.equal((inbound.tls as { enabled: boolean }).enabled, true)
+        if (inbound.type === 'vless') {
+            assert.equal(plan.hosts[0].security, 'reality')
+            assert.equal(plan.hosts[0].sni, PARAMETERS.reality.serverName)
+            assert.ok(plan.inbounds[0].realityPublicKey)
+        }
+
+        const result = await executeQuickDeployment(plan, api)
+
+        assert.equal(result.outcome, 'success')
+        assert.equal(createProfileCalls, 1)
+        assert.equal(updateProfileCalls, 0)
+        assert.equal(node.configProfile.activeConfigProfileUuid, 'xray-profile')
+        assert.equal(node.configProfile.activeSingBoxConfigProfileUuid, 'singbox-profile')
+        assert.ok(node.configProfile.activeInbounds.some((item) => item.uuid === 'xray-inbound'))
+        assert.ok(
+            node.configProfile.activeInbounds.some((item) => item.uuid === 'singbox-inbound-1')
+        )
+        assert.equal(createdHosts[0].inbound.configProfileUuid, 'singbox-profile')
+        assert.equal(createdHosts[0].address, PARAMETERS.hostAddress)
+        // Execution refreshes the plan against current server state. Hosts must
+        // reference the saved inbound, not an earlier preview's random port.
+        assert.ok(createdProfile)
+        assert.equal(
+            createdHosts[0].port,
+            (createdProfile.inbounds[0].rawInbound as SingBoxInbound).listen_port
+        )
     })
-    const inbound = plan.inbounds[0].inbound as SingBoxInbound
-    assert.equal(inbound.type, 'hysteria2')
-    assert.equal(inbound.listen, '127.0.0.1')
-    assert.equal((inbound.tls as { enabled: boolean }).enabled, true)
-
-    const result = await executeQuickDeployment(plan, api)
-
-    assert.equal(result.outcome, 'success')
-    assert.equal(createProfileCalls, 1)
-    assert.equal(updateProfileCalls, 0)
-    assert.equal(node.configProfile.activeConfigProfileUuid, 'xray-profile')
-    assert.equal(node.configProfile.activeSingBoxConfigProfileUuid, 'singbox-profile')
-    assert.ok(node.configProfile.activeInbounds.some((item) => item.uuid === 'xray-inbound'))
-    assert.ok(node.configProfile.activeInbounds.some((item) => item.uuid === 'singbox-inbound-1'))
-    assert.equal(createdHosts[0].inbound.configProfileUuid, 'singbox-profile')
-})
+}
 
 test('production capability gate blocks AnyTLS and SOCKS until their panel E2E passes', () => {
     const node = new FakeQuickDeployApi().node

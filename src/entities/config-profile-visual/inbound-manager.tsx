@@ -1,12 +1,18 @@
 import type { JsonObject, VisualCoreType, VisualDocument, VisualInbound } from './types.ts'
 
 import {
+    DEFAULT_SS2022_METHOD,
+    generateSs2022ServerPassword,
+    type Ss2022Method
+} from '@features/dashboard/config-profiles/protocol-presets/model/dual-core-capabilities'
+import {
     appendProtocolPresets,
     PROTOCOL_PRESETS,
     REALITY_MIN_CLIENT_VERSION_COMPAT,
     type ProtocolPresetBuildOptions,
     type ProtocolPresetId
 } from '@features/dashboard/config-profiles/protocol-presets/model/protocol-presets.ts'
+import { Ss2022MethodSelect } from '@features/dashboard/config-profiles/protocol-presets/ss2022-method-select'
 import { CORE_CAPABILITIES } from '@features/dashboard/nodes/quick-deploy/model/core-capabilities.ts'
 import { appendSingBoxProtocolPresets } from '@features/dashboard/nodes/quick-deploy/model/singbox-protocol-presets.ts'
 import {
@@ -19,6 +25,7 @@ import {
     Group,
     Modal,
     NumberInput,
+    PasswordInput,
     Select,
     SimpleGrid,
     Stack,
@@ -34,6 +41,7 @@ import { TbCopy, TbEdit, TbPlus, TbTrash } from 'react-icons/tb'
 
 import { useGetPanelTlsCertificate } from '@shared/api/hooks'
 import { PANEL_CERTIFICATE_URI, PANEL_PRIVATE_KEY_URI, isPanelCertificatePair } from '@shared/tls'
+import { deriveX25519PublicKey } from '@shared/utils/crypto/keypair-utils'
 
 import {
     applyVisualPatch,
@@ -58,12 +66,14 @@ type InboundManagerProps = {
 }
 
 type AddDraft = {
+    ss2022Method: Ss2022Method
     tag: string
     listen: string
     port: string
     minClientVer: string
     presetId: string
     targetDomain: string
+    targetPort: string
     serverName: string
     tlsDomain: string
     certificateFile: string
@@ -74,11 +84,7 @@ const getPresetOptions = (coreType: VisualCoreType) => {
     if (coreType === 'singbox') {
         return CORE_CAPABILITIES.filter(
             (capability) =>
-                capability.coreType === 'singbox' &&
-                capability.availability === 'enabled' &&
-                ['singbox-hysteria2', 'singbox-anytls', 'singbox-socks5', 'singbox-mixed'].includes(
-                    capability.id
-                )
+                capability.coreType === 'singbox' && capability.availability === 'enabled'
         )
             .filter(
                 (capability) =>
@@ -131,12 +137,14 @@ export function InboundVisualManager({
     )
     const [addOpen, setAddOpen] = useState(false)
     const [addDraft, setAddDraft] = useState<AddDraft>({
+        ss2022Method: DEFAULT_SS2022_METHOD,
         tag: '',
         listen: '0.0.0.0',
         port: '',
         minClientVer: REALITY_MIN_CLIENT_VERSION_COMPAT,
         presetId: getPresetOptions(coreType)[0]?.value ?? '',
         targetDomain: 'www.intel.com',
+        targetPort: '443',
         serverName: 'www.intel.com',
         tlsDomain: '',
         certificateFile:
@@ -155,6 +163,10 @@ export function InboundVisualManager({
     const editorReferences = editorInbound ? getInboundReferences(config, editorInbound.tag) : []
 
     const localizeError = (error: string) => {
+        if (error === 'This method is unavailable for SS2022 Managed Users.')
+            return t('dual-core.chacha-managed-unavailable')
+        if (error.startsWith('Server key must encode ')) return t('dual-core.invalid-server-key')
+        if (error.startsWith('Invalid Reality ')) return t('dual-core.invalid-reality')
         if (error === 'Inbound tag is required.')
             return t('visual-config-builder.errors.inbound-tag-required')
         if (error.startsWith('Inbound tag "') && error.endsWith('" is already used.')) {
@@ -306,12 +318,27 @@ export function InboundVisualManager({
             return
         }
 
-        const operations = buildInboundEditorOperations(
-            editorInbound.raw,
-            editorInbound.index,
-            coreType,
-            editorDraft
-        )
+        let operations: ReturnType<typeof buildInboundEditorOperations>
+        try {
+            operations = buildInboundEditorOperations(
+                editorInbound.raw,
+                editorInbound.index,
+                coreType,
+                editorDraft
+            )
+        } catch (error) {
+            modals.open({
+                title: t('visual-config-builder.inbound.cannot-save'),
+                children: (
+                    <Text>
+                        {error instanceof Error
+                            ? localizeError(error.message)
+                            : t('common.message.error')}
+                    </Text>
+                )
+            })
+            return
+        }
         const renaming = editorDraft.tag.trim() !== editorInbound.tag
         const commit = () => {
             const nextOperations = [...operations]
@@ -397,9 +424,11 @@ export function InboundVisualManager({
             const current = Array.isArray(config.inbounds) ? config.inbounds : []
             if (coreType === 'xray') {
                 const xrayOptions: ProtocolPresetBuildOptions = {
+                    ss2022Method: addDraft.ss2022Method,
                     reality: {
                         minClientVer: addDraft.minClientVer,
                         targetDomain: addDraft.targetDomain,
+                        targetPort: addDraft.targetPort,
                         serverName: addDraft.serverName
                     },
                     tls: {
@@ -416,6 +445,12 @@ export function InboundVisualManager({
                 next = result.added[0].inbound
             } else {
                 const result = appendSingBoxProtocolPresets(config, [presetId as never], {
+                    reality: {
+                        targetDomain: addDraft.targetDomain,
+                        targetPort: addDraft.targetPort,
+                        serverName: addDraft.serverName
+                    },
+                    ss2022Method: addDraft.ss2022Method,
                     reservedTags: inbounds.map((item) => item.tag),
                     reservedPorts: inbounds.flatMap((item) =>
                         typeof item.port === 'number' ? [item.port] : []
@@ -855,7 +890,7 @@ export function InboundVisualManager({
                                         disabled={editorSnippetManaged}
                                         label={t('visual-config-builder.security')}
                                         data={
-                                            coreType === 'xray'
+                                            coreType === 'xray' || editorDraft.protocol === 'vless'
                                                 ? ['none', 'tls', 'reality']
                                                 : ['none', 'tls']
                                         }
@@ -872,6 +907,127 @@ export function InboundVisualManager({
                                             })
                                         }
                                     />
+                                    {editorDraft.protocol === 'shadowsocks' &&
+                                        editorDraft.ssMethod.startsWith('2022-') && (
+                                            <Stack>
+                                                <Ss2022MethodSelect
+                                                    value={editorDraft.ssMethod}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(ssMethod) =>
+                                                        setEditorDraft({ ...editorDraft, ssMethod })
+                                                    }
+                                                />
+                                                <Alert color="yellow">
+                                                    {t('dual-core.cipher-change')}
+                                                </Alert>
+                                                <PasswordInput
+                                                    label={t('dual-core.server-password')}
+                                                    value={editorDraft.ssServerPassword}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            ssServerPassword:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <Button
+                                                    disabled={
+                                                        editorSnippetManaged ||
+                                                        editorDraft.ssMethod.includes('chacha20')
+                                                    }
+                                                    onClick={() =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            ssServerPassword:
+                                                                generateSs2022ServerPassword(
+                                                                    editorDraft.ssMethod
+                                                                )
+                                                        })
+                                                    }
+                                                >
+                                                    {t('dual-core.generate-key')}
+                                                </Button>
+                                                <Select
+                                                    label="TCP / UDP"
+                                                    value={editorDraft.ssNetwork}
+                                                    data={['tcp,udp', 'tcp', 'udp']}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(value) =>
+                                                        value &&
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            ssNetwork: value
+                                                        })
+                                                    }
+                                                />
+                                                <Text>{t('dual-core.managed-users')}</Text>
+                                            </Stack>
+                                        )}
+                                    {editorDraft.security === 'reality' &&
+                                        coreType === 'singbox' && (
+                                            <Stack>
+                                                <Text>{t('dual-core.flow')}</Text>
+                                                <TextInput
+                                                    label={t(
+                                                        'visual-config-builder.inbound.reality-target'
+                                                    )}
+                                                    value={editorDraft.realityTarget}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityTarget: event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    label="SNI"
+                                                    value={editorDraft.realityServerNames[0] ?? ''}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityServerNames: [
+                                                                event.currentTarget.value
+                                                            ]
+                                                        })
+                                                    }
+                                                />
+                                                <PasswordInput
+                                                    label={t('dual-core.private-key')}
+                                                    value={editorDraft.realityPrivateKey}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(event) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityPrivateKey:
+                                                                event.currentTarget.value
+                                                        })
+                                                    }
+                                                />
+                                                <TextInput
+                                                    label={t('dual-core.public-key')}
+                                                    readOnly
+                                                    value={deriveX25519PublicKey(
+                                                        editorDraft.realityPrivateKey
+                                                    )}
+                                                />
+                                                <TagsInput
+                                                    label="shortId"
+                                                    value={editorDraft.realityShortIds}
+                                                    disabled={editorSnippetManaged}
+                                                    onChange={(value) =>
+                                                        setEditorDraft({
+                                                            ...editorDraft,
+                                                            realityShortIds:
+                                                                normalizeTagValues(value)
+                                                        })
+                                                    }
+                                                />
+                                            </Stack>
+                                        )}
                                     {editorDraft.security === 'reality' && coreType === 'xray' && (
                                         <Stack>
                                             <SimpleGrid cols={2}>
@@ -1347,8 +1503,23 @@ export function InboundVisualManager({
                         max={65_535}
                         placeholder={t('visual-config-builder.preset-free-port')}
                     />
-                    {coreType === 'xray' && addDraft.presetId.startsWith('vless-reality') && (
+                    {addDraft.presetId.includes('shadowsocks-2022') && (
+                        <Ss2022MethodSelect
+                            value={addDraft.ss2022Method}
+                            onChange={(ss2022Method) => setAddDraft({ ...addDraft, ss2022Method })}
+                        />
+                    )}
+                    {addDraft.presetId.includes('vless-reality') && (
                         <SimpleGrid cols={2}>
+                            <NumberInput
+                                label={t('dual-core.handshake-port')}
+                                min={1}
+                                max={65535}
+                                value={addDraft.targetPort}
+                                onChange={(value) =>
+                                    setAddDraft({ ...addDraft, targetPort: String(value) })
+                                }
+                            />
                             <TextInput
                                 label={t('visual-config-builder.reality-target-domain')}
                                 value={addDraft.targetDomain}
@@ -1369,16 +1540,18 @@ export function InboundVisualManager({
                                     })
                                 }
                             />
-                            <TextInput
-                                label={t('visual-config-builder.minimum-client-version')}
-                                value={addDraft.minClientVer}
-                                onChange={(event) =>
-                                    setAddDraft({
-                                        ...addDraft,
-                                        minClientVer: event.currentTarget.value
-                                    })
-                                }
-                            />
+                            {coreType === 'xray' && (
+                                <TextInput
+                                    label={t('visual-config-builder.minimum-client-version')}
+                                    value={addDraft.minClientVer}
+                                    onChange={(event) =>
+                                        setAddDraft({
+                                            ...addDraft,
+                                            minClientVer: event.currentTarget.value
+                                        })
+                                    }
+                                />
+                            )}
                         </SimpleGrid>
                     )}
                     {((coreType === 'xray' &&

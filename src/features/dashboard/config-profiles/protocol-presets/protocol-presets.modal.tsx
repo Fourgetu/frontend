@@ -24,11 +24,17 @@ import { TbAlertTriangle, TbBolt, TbCertificate, TbWorld } from 'react-icons/tb'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
 import {
+    getCoreCapabilities,
+    getQuickDeployCapability,
+    type QuickDeployProtocolId,
+    type ProxyCoreType
+} from '../../nodes/quick-deploy/model/core-capabilities'
+import { appendSingBoxProtocolPresets } from '../../nodes/quick-deploy/model/singbox-protocol-presets'
+import { DEFAULT_SS2022_METHOD, type Ss2022Method } from './model/dual-core-capabilities'
+import {
     appendProtocolPresets,
-    AppendProtocolPresetsResult,
     DEFAULT_REALITY_TARGET_DOMAIN,
     DEFAULT_REALITY_TARGET_PORT,
-    getRecommendedPresetIds,
     PROTOCOL_PRESETS,
     ProtocolPresetId,
     RealityPresetOptions,
@@ -42,10 +48,12 @@ import {
     REALITY_CLIENT_COMPATIBILITY,
     REALITY_MIN_CLIENT_VERSION_COMPAT
 } from './model/reality-compatibility.ts'
+import { Ss2022MethodSelect } from './ss2022-method-select'
 
 const MODAL_ID = 'config-profile-protocol-presets'
 
 const DESCRIPTION_KEYS = {
+    'shadowsocks-2022': 'dual-core.ss-description',
     'vless-reality-vision': 'protocol-presets.description.vless-reality-vision',
     'vless-reality-grpc': 'protocol-presets.description.vless-reality-grpc',
     'trojan-tcp-tls': 'protocol-presets.description.trojan-tcp-tls',
@@ -55,21 +63,43 @@ const DESCRIPTION_KEYS = {
 } as const
 
 interface Props {
+    coreType: ProxyCoreType
     currentConfig: Record<string, unknown>
     onConfirm: (config: Record<string, unknown>, addedCount: number) => void
 }
 
-const resolveServerName = (result: AppendProtocolPresetsResult, index: number): string => {
-    const stream = result.added[index].inbound.streamSettings
+type Preview = {
+    config: Record<string, unknown>
+    added: {
+        inbound: Record<string, unknown> & { tag: string }
+        preset: { title: string; security: string; transport: string }
+    }[]
+}
+const record = (value: unknown): Record<string, unknown> =>
+    value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {}
+const resolveServerName = (result: Preview, index: number): string => {
+    const inbound = result.added[index].inbound
+    const stream = record(inbound.streamSettings)
     const reality = stream.realitySettings as { serverNames?: string[] } | undefined
     const tls = stream.tlsSettings as { serverName?: string } | undefined
-    return reality?.serverNames?.[0] ?? tls?.serverName ?? '—'
+    return (
+        reality?.serverNames?.[0] ??
+        tls?.serverName ??
+        String(record(inbound.tls).server_name ?? '—')
+    )
 }
 
-const resolveRealityTarget = (result: AppendProtocolPresetsResult, index: number): string => {
-    const stream = result.added[index].inbound.streamSettings
+const resolveRealityTarget = (result: Preview, index: number): string => {
+    const inbound = result.added[index].inbound
+    const stream = record(inbound.streamSettings)
     const reality = stream.realitySettings as { target?: string } | undefined
-    return reality?.target ?? '—'
+    const handshake = record(record(record(inbound.tls).reality).handshake)
+    return (
+        reality?.target ??
+        (handshake.server ? `${handshake.server}:${handshake.server_port ?? 443}` : '—')
+    )
 }
 
 const getExistingRealityInbounds = (config: Record<string, unknown>) => {
@@ -96,7 +126,7 @@ const getExistingRealityInbounds = (config: Record<string, unknown>) => {
     })
 }
 
-export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
+export const ProtocolPresetsModal = ({ coreType, currentConfig, onConfirm }: Props) => {
     const { t } = useTranslation()
     const [tls, setTls] = useState<TlsPresetOptions>({
         domain: '',
@@ -112,8 +142,16 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
         serverName: DEFAULT_REALITY_TARGET_DOMAIN
     })
     const [invalidFields, setInvalidFields] = useState<string[]>([])
-    const [preview, setPreview] = useState<AppendProtocolPresetsResult | null>(null)
-    const existingRealityInbounds = getExistingRealityInbounds(currentConfig)
+    const [preview, setPreview] = useState<Preview | null>(null)
+    const [ss2022Method, setSs2022Method] = useState<Ss2022Method>(DEFAULT_SS2022_METHOD)
+    const availablePresets =
+        coreType === 'xray'
+            ? PROTOCOL_PRESETS
+            : getCoreCapabilities(coreType)
+                  .filter((p) => p.availability === 'enabled')
+                  .map((p) => ({ ...p, supported: true }))
+    const existingRealityInbounds =
+        coreType === 'xray' ? getExistingRealityInbounds(currentConfig) : []
     const realityWithoutExplicitVersion = existingRealityInbounds.filter(
         (inbound) => !inbound.minClientVer
     )
@@ -146,13 +184,13 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
         setPreview(null)
     }
 
-    const buildPreview = (presetIds: ProtocolPresetId[]) => {
+    const buildPreview = (presetIds: string[]) => {
         const needsTls = presetIds.some(
-            (id) => PROTOCOL_PRESETS.find((preset) => preset.id === id)?.needsCertificate
+            (id) => availablePresets.find((preset) => preset.id === id)?.needsCertificate
         )
 
         const needsReality = presetIds.some(
-            (id) => PROTOCOL_PRESETS.find((preset) => preset.id === id)?.security === 'Reality'
+            (id) => availablePresets.find((preset) => preset.id === id)?.security === 'Reality'
         )
         const invalid = [
             ...(needsTls ? validateTlsPresetOptions(tls) : []),
@@ -162,8 +200,28 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
         if (invalid.length > 0) return
 
         try {
+            if (coreType === 'singbox') {
+                const result = appendSingBoxProtocolPresets(
+                    currentConfig,
+                    presetIds as QuickDeployProtocolId[],
+                    {
+                        reality,
+                        tls,
+                        ss2022Method
+                    }
+                )
+                setPreview({
+                    config: result.config,
+                    added: result.added.map((item) => ({
+                        inbound: item.inbound,
+                        preset: getQuickDeployCapability(item.presetId)
+                    }))
+                })
+                return
+            }
             setPreview(
-                appendProtocolPresets(currentConfig, presetIds, {
+                appendProtocolPresets(currentConfig, presetIds as ProtocolPresetId[], {
+                    ss2022Method,
                     reality: needsReality
                         ? {
                               ...reality,
@@ -261,45 +319,56 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
                         value={reality.serverName}
                     />
                 </SimpleGrid>
-                <Select
-                    data={[
-                        {
-                            label: `${t('protocol-presets.compatibility-compatible')} (${REALITY_CLIENT_COMPATIBILITY.compatible})`,
-                            value: REALITY_CLIENT_COMPATIBILITY.compatible
-                        },
-                        {
-                            label: `${t('protocol-presets.compatibility-mihomo')} (${REALITY_CLIENT_COMPATIBILITY.mihomo})`,
-                            value: REALITY_CLIENT_COMPATIBILITY.mihomo
-                        },
-                        {
-                            label: `${t('protocol-presets.compatibility-xray')} (${REALITY_CLIENT_COMPATIBILITY.xray})`,
-                            value: REALITY_CLIENT_COMPATIBILITY.xray
-                        },
-                        {
-                            label: `${t('protocol-presets.compatibility-unrestricted')} (${REALITY_CLIENT_COMPATIBILITY.unrestricted})`,
-                            value: REALITY_CLIENT_COMPATIBILITY.unrestricted
-                        }
-                    ]}
-                    description={t('protocol-presets.reality-compatibility-help')}
-                    label={t('protocol-presets.reality-min-client-version')}
-                    onChange={(value) => value && setRealityMinClientVer(value)}
-                    value={realityMinClientVer}
+                {coreType === 'xray' && (
+                    <>
+                        <Select
+                            data={[
+                                {
+                                    label: `${t('protocol-presets.compatibility-compatible')} (${REALITY_CLIENT_COMPATIBILITY.compatible})`,
+                                    value: REALITY_CLIENT_COMPATIBILITY.compatible
+                                },
+                                {
+                                    label: `${t('protocol-presets.compatibility-mihomo')} (${REALITY_CLIENT_COMPATIBILITY.mihomo})`,
+                                    value: REALITY_CLIENT_COMPATIBILITY.mihomo
+                                },
+                                {
+                                    label: `${t('protocol-presets.compatibility-xray')} (${REALITY_CLIENT_COMPATIBILITY.xray})`,
+                                    value: REALITY_CLIENT_COMPATIBILITY.xray
+                                },
+                                {
+                                    label: `${t('protocol-presets.compatibility-unrestricted')} (${REALITY_CLIENT_COMPATIBILITY.unrestricted})`,
+                                    value: REALITY_CLIENT_COMPATIBILITY.unrestricted
+                                }
+                            ]}
+                            description={t('protocol-presets.reality-compatibility-help')}
+                            label={t('protocol-presets.reality-min-client-version')}
+                            onChange={(value) => value && setRealityMinClientVer(value)}
+                            value={realityMinClientVer}
+                        />
+                        {realityMinClientVer === REALITY_CLIENT_COMPATIBILITY.mihomo && (
+                            <Alert color="yellow" icon={<TbAlertTriangle size={18} />}>
+                                {t('protocol-presets.reality-warning-mihomo')}
+                            </Alert>
+                        )}
+                        {realityMinClientVer === REALITY_CLIENT_COMPATIBILITY.xray && (
+                            <Alert color="red" icon={<TbAlertTriangle size={18} />}>
+                                {t('protocol-presets.reality-warning-xray')}
+                            </Alert>
+                        )}
+                        {realityMinClientVer === REALITY_CLIENT_COMPATIBILITY.unrestricted && (
+                            <Alert color="orange" icon={<TbAlertTriangle size={18} />}>
+                                {t('protocol-presets.reality-warning-unrestricted')}
+                            </Alert>
+                        )}
+                    </>
+                )}
+                <Ss2022MethodSelect
+                    value={ss2022Method}
+                    onChange={(value) => {
+                        setSs2022Method(value)
+                        setPreview(null)
+                    }}
                 />
-                {realityMinClientVer === REALITY_CLIENT_COMPATIBILITY.mihomo && (
-                    <Alert color="yellow" icon={<TbAlertTriangle size={18} />}>
-                        {t('protocol-presets.reality-warning-mihomo')}
-                    </Alert>
-                )}
-                {realityMinClientVer === REALITY_CLIENT_COMPATIBILITY.xray && (
-                    <Alert color="red" icon={<TbAlertTriangle size={18} />}>
-                        {t('protocol-presets.reality-warning-xray')}
-                    </Alert>
-                )}
-                {realityMinClientVer === REALITY_CLIENT_COMPATIBILITY.unrestricted && (
-                    <Alert color="orange" icon={<TbAlertTriangle size={18} />}>
-                        {t('protocol-presets.reality-warning-unrestricted')}
-                    </Alert>
-                )}
                 <Group justify="space-between">
                     <Text fw={600}>{t('protocol-presets.tls-settings')}</Text>
                     <Text c="dimmed" size="xs">
@@ -347,7 +416,13 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
                 <Text fw={600}>{t('protocol-presets.available-presets')}</Text>
                 <Button
                     leftSection={<TbBolt size={16} />}
-                    onClick={() => buildPreview(getRecommendedPresetIds())}
+                    onClick={() =>
+                        buildPreview(
+                            availablePresets
+                                .filter((p) => p.recommended && p.supported)
+                                .map((p) => p.id)
+                        )
+                    }
                     variant="light"
                 >
                     {t('protocol-presets.add-all-recommended')}
@@ -355,7 +430,7 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
             </Group>
 
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                {PROTOCOL_PRESETS.map((preset) => (
+                {availablePresets.map((preset) => (
                     <Card key={preset.id} padding="md" radius="md" withBorder>
                         <Stack gap="sm" h="100%">
                             <Group gap="xs" justify="space-between" wrap="nowrap">
@@ -399,7 +474,13 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
                             </Group>
 
                             <Text c="dimmed" size="sm">
-                                {t(DESCRIPTION_KEYS[preset.id])}
+                                {preset.id.replace('singbox-', '') in DESCRIPTION_KEYS
+                                    ? t(
+                                          DESCRIPTION_KEYS[
+                                              preset.id.replace('singbox-', '') as ProtocolPresetId
+                                          ]
+                                      )
+                                    : preset.title}
                             </Text>
 
                             <Button
@@ -450,7 +531,9 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
                                             <Table.Td>
                                                 <Code>{inbound.tag}</Code>
                                             </Table.Td>
-                                            <Table.Td>{inbound.port}</Table.Td>
+                                            <Table.Td>
+                                                {String(inbound.port ?? inbound.listen_port)}
+                                            </Table.Td>
                                             <Table.Td>
                                                 {preset.security === 'Reality'
                                                     ? resolveRealityTarget(preview, index)
@@ -460,13 +543,14 @@ export const ProtocolPresetsModal = ({ currentConfig, onConfirm }: Props) => {
                                             <Table.Td>{preset.transport}</Table.Td>
                                             <Table.Td>{preset.security}</Table.Td>
                                             <Table.Td>
-                                                {preset.security === 'Reality'
-                                                    ? ((
-                                                          preview.added[index].inbound
-                                                              .streamSettings.realitySettings as {
-                                                              minClientVer?: string
-                                                          }
-                                                      )?.minClientVer ?? '—')
+                                                {preset.security === 'Reality' &&
+                                                coreType === 'xray'
+                                                    ? String(
+                                                          record(
+                                                              record(inbound.streamSettings)
+                                                                  .realitySettings
+                                                          ).minClientVer ?? '—'
+                                                      )
                                                     : '—'}
                                             </Table.Td>
                                         </Table.Tr>

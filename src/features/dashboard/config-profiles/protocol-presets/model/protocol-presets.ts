@@ -2,6 +2,11 @@ import type { CertificateSource } from '../../../../../shared/tls'
 
 import { generateX25519 } from '../../../../../shared/utils/crypto/keypair-utils.ts'
 import {
+    generateSs2022ServerPassword,
+    getProtocolPipeline,
+    type Ss2022Method
+} from './dual-core-capabilities.ts'
+import {
     normalizeRealityMinClientVersion,
     REALITY_MIN_CLIENT_VERSION_COMPAT,
     validateRealityMinClientVersion
@@ -21,6 +26,7 @@ export {
 } from './reality-compatibility.ts'
 
 export type ProtocolPresetId =
+    | 'shadowsocks-2022'
     | 'vless-reality-vision'
     | 'vless-reality-grpc'
     | 'trojan-tcp-tls'
@@ -82,6 +88,7 @@ export interface AppendProtocolPresetsResult {
 }
 
 export interface ProtocolPresetBuildOptions {
+    ss2022Method?: Ss2022Method
     reality?: RealityPresetOptions
     reservedTags?: readonly string[]
     tls?: TlsPresetOptions
@@ -115,7 +122,17 @@ export const resolveRealityPresetOptions = (
     }
 }
 
-export const PROTOCOL_PRESETS: readonly ProtocolPreset[] = [
+const PRESET_ENTRIES: readonly ProtocolPreset[] = [
+    {
+        id: 'shadowsocks-2022',
+        title: 'Shadowsocks 2022',
+        transport: 'TCP + UDP',
+        security: 'AEAD 2022',
+        needsDomain: false,
+        needsCertificate: false,
+        recommended: false,
+        supported: true
+    },
     {
         id: 'vless-reality-vision',
         title: 'VLESS Reality Vision',
@@ -163,8 +180,8 @@ export const PROTOCOL_PRESETS: readonly ProtocolPreset[] = [
         security: 'TLS',
         needsDomain: true,
         needsCertificate: true,
-        recommended: true,
-        supported: true
+        recommended: false,
+        supported: false
     },
     {
         id: 'mixed',
@@ -177,6 +194,13 @@ export const PROTOCOL_PRESETS: readonly ProtocolPreset[] = [
         supported: true
     }
 ] as const
+
+export const PROTOCOL_PRESETS: readonly ProtocolPreset[] = PRESET_ENTRIES.map((preset) => {
+    const pipeline = getProtocolPipeline('xray', preset.id)
+    return pipeline && !pipeline.quickProtocol
+        ? { ...preset, supported: false, recommended: false }
+        : preset
+})
 
 const getWebCrypto = (): Crypto => {
     if (!globalThis.crypto) throw new Error('Web Crypto is unavailable in this browser.')
@@ -536,6 +560,23 @@ const buildPreset = (
     }
 
     switch (preset.id) {
+        case 'shadowsocks-2022':
+            return {
+                preset,
+                inbound: baseInbound(
+                    preset.id,
+                    'shadowsocks',
+                    {
+                        method: options.ss2022Method ?? '2022-blake3-aes-128-gcm',
+                        password: generateSs2022ServerPassword(options.ss2022Method),
+                        network: 'tcp,udp',
+                        clients: []
+                    },
+                    { network: 'raw', security: 'none' },
+                    usedPorts,
+                    usedTags
+                )
+            }
         case 'vless-reality-vision':
             return buildVlessRealityVisionPreset(preset, usedPorts, usedTags, options.reality)
         case 'vless-reality-grpc':

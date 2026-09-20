@@ -3,6 +3,7 @@ import type { JsonObject } from './types.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { appendSingBoxProtocolPresets } from '../../features/dashboard/nodes/quick-deploy/model/singbox-protocol-presets.ts'
 import { supportsInboundProtocol } from './capabilities.ts'
 import {
     buildInboundEditorOperations,
@@ -25,6 +26,67 @@ import {
 } from './outbound.ts'
 import { parseConfigProfile } from './parse.ts'
 import { applyVisualPatch } from './patch.ts'
+
+test('SS2022 graphical port conflicts cover both TCP and UDP listeners', () => {
+    const ss = { type: 'shadowsocks', listen: '127.0.0.1', listen_port: 23456, tag: 'ss' }
+    const hy2 = { type: 'hysteria2', listen: '127.0.0.1', listen_port: 23456, tag: 'hy2' }
+    const vless = { protocol: 'vless', listen: '127.0.0.1', port: 23456, tag: 'vless' }
+    assert.match(getInboundPortConflict([ss], hy2)!, /UDP/)
+    assert.match(getInboundPortConflict([ss], vless)!, /TCP/)
+    assert.equal(getInboundPortConflict([{ ...ss, network: 'tcp' }], hy2), undefined)
+    assert.equal(getInboundPortConflict([{ ...ss, network: 'udp' }], vless), undefined)
+})
+
+test('native Reality visual edits round-trip handshake fields and preserve unknown fields/users', () => {
+    const generated = appendSingBoxProtocolPresets({}, ['singbox-vless-reality-vision'], {
+        tls: { domain: '', certificateFile: '', keyFile: '' }
+    }).added[0].inbound
+    const inbound = { ...generated, custom: { keep: true } } as JsonObject
+    const tls = inbound.tls as JsonObject
+    const reality = tls.reality as JsonObject
+    reality.unknown = { keep: true }
+    ;(reality.handshake as JsonObject).detour = 'direct'
+    inbound.users = [{ name: 'managed', uuid: 'test', flow: 'xtls-rprx-vision' }]
+    const draft = getInboundEditorDraft(inbound, 'singbox', '1.8.1')
+    assert.equal(draft.security, 'reality')
+    assert.deepEqual(buildInboundEditorOperations(inbound, 0, 'singbox', draft), [])
+    draft.realityTarget = 'new.example.com:8443'
+    draft.realityServerNames = ['sni.example.com']
+    const next = applyVisualPatch(
+        { inbounds: [inbound] },
+        {
+            operations: buildInboundEditorOperations(inbound, 0, 'singbox', draft)
+        }
+    )
+    const edited = (next.inbounds as JsonObject[])[0]
+    const editedTls = edited.tls as JsonObject
+    const editedReality = editedTls.reality as JsonObject
+    assert.deepEqual(editedReality.handshake, {
+        server: 'new.example.com',
+        server_port: 8443,
+        detour: 'direct'
+    })
+    assert.deepEqual(editedReality.unknown, { keep: true })
+    assert.deepEqual(edited.users, inbound.users)
+    assert.deepEqual(edited.custom, inbound.custom)
+    assert.equal(editedTls.server_name, 'sni.example.com')
+    assert.equal('streamSettings' in edited, false)
+    assert.equal(JSON.stringify(edited).includes('minClientVer'), false)
+})
+
+test('SS2022 visual editor rejects ChaCha20 and wrong-size keys without mutating the draft source', () => {
+    const inbound = appendSingBoxProtocolPresets({}, ['singbox-shadowsocks-2022'], {
+        tls: { domain: '', certificateFile: '', keyFile: '' }
+    }).added[0].inbound as JsonObject
+    const before = JSON.stringify(inbound)
+    const draft = getInboundEditorDraft(inbound, 'singbox', '1.8.1')
+    assert.deepEqual(buildInboundEditorOperations(inbound, 0, 'singbox', draft), [])
+    draft.ssMethod = '2022-blake3-chacha20-poly1305'
+    assert.throws(() => buildInboundEditorOperations(inbound, 0, 'singbox', draft), /Managed Users/)
+    draft.ssMethod = '2022-blake3-aes-256-gcm'
+    assert.throws(() => buildInboundEditorOperations(inbound, 0, 'singbox', draft), /32 bytes/)
+    assert.equal(JSON.stringify(inbound), before)
+})
 import {
     cloneRoutingRule,
     commonRuleTemplates,

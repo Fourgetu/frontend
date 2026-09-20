@@ -5,6 +5,19 @@ import {
     PANEL_CERTIFICATE_URI,
     PANEL_PRIVATE_KEY_URI
 } from '../../../../../shared/tls/managed-certificate.ts'
+import {
+    deriveX25519PublicKey,
+    generateX25519
+} from '../../../../../shared/utils/crypto/keypair-utils.ts'
+import {
+    generateSs2022ServerPassword,
+    type Ss2022Method
+} from '../../../config-profiles/protocol-presets/model/dual-core-capabilities.ts'
+import {
+    resolveRealityPresetOptions,
+    validateRealityPresetOptions,
+    type RealityPresetOptions
+} from '../../../config-profiles/protocol-presets/model/protocol-presets.ts'
 
 export interface SingBoxInbound extends Record<string, unknown> {
     listen: string
@@ -15,6 +28,7 @@ export interface SingBoxInbound extends Record<string, unknown> {
 }
 
 export interface BuiltSingBoxPreset {
+    realityPublicKey?: string
     inbound: SingBoxInbound
     presetId: QuickDeployProtocolId
 }
@@ -97,7 +111,8 @@ const buildInbound = (
     id: QuickDeployProtocolId,
     tls: TlsPresetOptions,
     usedPorts: Set<number>,
-    usedTags: Set<string>
+    usedTags: Set<string>,
+    options: { reality?: RealityPresetOptions; ss2022Method?: Ss2022Method }
 ): SingBoxInbound => {
     const common = {
         tag: nextTag(id, usedTags),
@@ -107,6 +122,44 @@ const buildInbound = (
     }
 
     switch (id) {
+        case 'singbox-vless-reality-vision': {
+            const nativeOptions = {
+                targetDomain: options.reality?.targetDomain,
+                targetPort: options.reality?.targetPort,
+                serverName: options.reality?.serverName
+            }
+            if (validateRealityPresetOptions(nativeOptions).length)
+                throw new Error('Invalid Reality handshake.')
+            const reality = resolveRealityPresetOptions(nativeOptions)
+            return {
+                ...common,
+                type: 'vless',
+                tls: {
+                    enabled: true,
+                    server_name: reality.serverName,
+                    reality: {
+                        enabled: true,
+                        handshake: {
+                            server: reality.targetDomain,
+                            server_port: reality.targetPort
+                        },
+                        private_key: generateX25519().privateKey,
+                        short_id: [
+                            Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join(
+                                ''
+                            )
+                        ]
+                    }
+                }
+            }
+        }
+        case 'singbox-shadowsocks-2022':
+            return {
+                ...common,
+                type: 'shadowsocks',
+                method: options.ss2022Method ?? '2022-blake3-aes-128-gcm',
+                password: generateSs2022ServerPassword(options.ss2022Method)
+            }
         case 'singbox-hysteria2':
             validateTls(tls)
             return {
@@ -152,6 +205,8 @@ export const appendSingBoxProtocolPresets = (
         reservedTags?: readonly string[]
         reservedPorts?: readonly number[]
         tls: TlsPresetOptions
+        reality?: RealityPresetOptions
+        ss2022Method?: Ss2022Method
     }
 ): { added: BuiltSingBoxPreset[]; config: Record<string, unknown> } => {
     if (config.inbounds !== undefined && !Array.isArray(config.inbounds)) {
@@ -169,10 +224,17 @@ export const appendSingBoxProtocolPresets = (
         }
     }
 
-    const added = presetIds.map((presetId) => ({
-        presetId,
-        inbound: buildInbound(presetId, options.tls, usedPorts, usedTags)
-    }))
+    const added = presetIds.map((presetId) => {
+        const inbound = buildInbound(presetId, options.tls, usedPorts, usedTags, options)
+        const tls = inbound.tls as { reality?: { private_key?: string } } | undefined
+        return {
+            presetId,
+            inbound,
+            ...(tls?.reality?.private_key
+                ? { realityPublicKey: deriveX25519PublicKey(tls.reality.private_key) }
+                : {})
+        }
+    })
     return {
         added,
         config: { ...config, inbounds: [...inbounds, ...added.map((item) => item.inbound)] }

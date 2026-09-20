@@ -19,7 +19,7 @@ export const userRouteSchema = z.object({
     internalPort: z.number().int().min(1).max(65535),
     gostForwardId: z.string().nullable(),
     gostServiceName: z.string().nullable(),
-    network: z.enum(['tcp', 'udp']),
+    network: z.enum(['tcp', 'udp', 'tcp,udp']),
     enabled: z.boolean(),
     hopStartPort: z.number().int().min(1).max(65535).nullable(),
     hopEndPort: z.number().int().min(1).max(65535).nullable(),
@@ -53,7 +53,7 @@ const createRouteBodySchema = z.object({
     allowPublicInbound: z.boolean().optional(),
     internalAddress: z.enum(['127.0.0.1', '::1']),
     internalPort: z.number().int().min(1).max(65535),
-    network: z.enum(['tcp', 'udp']),
+    network: z.enum(['tcp', 'udp', 'tcp,udp']),
     enabled: z.boolean()
 })
 const updateRouteBodySchema = z.object({

@@ -1,6 +1,9 @@
 import type { JsonObject, VisualCoreType, VisualPatchOperation } from './types.ts'
 
 export type InboundEditorDraft = {
+    ssMethod: string
+    ssServerPassword: string
+    ssNetwork: string
     tag: string
     listen: string
     port: string
@@ -70,10 +73,15 @@ export const getInboundEditorDraft = (
     if (coreType === 'singbox') {
         const tls = object(inbound.tls)
         const utls = object(tls.utls)
+        const reality = object(tls.reality)
+        const handshake = object(reality.handshake)
         const transport = object(inbound.transport)
         const users =
             Array.isArray(inbound.users) && isObject(inbound.users[0]) ? inbound.users[0] : {}
         return {
+            ssMethod: text(inbound.method),
+            ssServerPassword: text(inbound.password),
+            ssNetwork: text(inbound.network) || 'tcp,udp',
             tag: text(inbound.tag),
             listen: text(inbound.listen),
             port: text(inbound.listen_port),
@@ -90,13 +98,15 @@ export const getInboundEditorDraft = (
             serviceName: text(transport.service_name),
             multiMode: false,
             xhttpMode: '',
-            security: bool(tls.enabled) ? 'tls' : 'none',
+            security: bool(tls.enabled) ? (bool(reality.enabled) ? 'reality' : 'tls') : 'none',
             realityShow: false,
             realityXver: '',
-            realityTarget: '',
-            realityServerNames: [],
-            realityPrivateKey: '',
-            realityShortIds: [],
+            realityTarget: handshake.server
+                ? `${text(handshake.server)}:${text(handshake.server_port) || '443'}`
+                : '',
+            realityServerNames: text(tls.server_name) ? [text(tls.server_name)] : [],
+            realityPrivateKey: text(reality.private_key),
+            realityShortIds: strings(reality.short_id),
             realitySpiderX: '',
             realityFingerprint: '',
             realityMaxTimeDiff: '',
@@ -146,6 +156,9 @@ export const getInboundEditorDraft = (
             ? settings.accounts[0]
             : {}
     return {
+        ssMethod: text(settings.method),
+        ssServerPassword: text(settings.password),
+        ssNetwork: text(settings.network) || 'tcp,udp',
         tag: text(inbound.tag),
         listen: text(inbound.listen),
         port: text(inbound.port),
@@ -216,10 +229,43 @@ export const buildInboundEditorOperations = (
                     ? [{ username: draft.username, password: draft.password }]
                     : []
         }
-        if (draft.security === 'tls') {
+        if (draft.security === 'reality') {
+            if (
+                !/^[A-Za-z0-9_-]{43}$/.test(draft.realityPrivateKey) ||
+                draft.realityShortIds.length === 0 ||
+                draft.realityShortIds.some((value) => !/^(?:[0-9a-fA-F]{2}){0,8}$/.test(value))
+            ) {
+                throw new Error('Invalid Reality private key or short ID.')
+            }
+            const split = draft.realityTarget.lastIndexOf(':')
+            const server = draft.realityTarget.slice(0, split).trim()
+            const serverPort = port(draft.realityTarget.slice(split + 1))
+            if (split < 1 || !serverPort) throw new Error('Invalid Reality handshake host:port.')
+            const originalTls = object(next.tls)
+            const originalReality = object(originalTls.reality)
+            next.tls = {
+                ...originalTls,
+                enabled: true,
+                server_name: draft.realityServerNames[0] || '',
+                reality: {
+                    ...originalReality,
+                    enabled: true,
+                    handshake: {
+                        ...object(originalReality.handshake),
+                        server,
+                        server_port: serverPort
+                    },
+                    private_key: draft.realityPrivateKey,
+                    short_id: normalizeTagValues(draft.realityShortIds)
+                }
+            }
+        } else if (draft.security === 'tls') {
             const originalTls = object(next.tls)
             next.tls = {
                 ...originalTls,
+                ...(isObject(originalTls.reality)
+                    ? { reality: { ...originalTls.reality, enabled: false } }
+                    : {}),
                 enabled: true,
                 server_name: draft.tlsServerName,
                 alpn: normalizeTagValues(draft.tlsAlpn),
@@ -251,6 +297,10 @@ export const buildInboundEditorOperations = (
         if (
             [
                 'security',
+                'realityTarget',
+                'realityServerNames',
+                'realityPrivateKey',
+                'realityShortIds',
                 'tlsServerName',
                 'tlsAlpn',
                 'certificateFile',
@@ -474,6 +524,43 @@ export const buildInboundEditorOperations = (
         }
     }
 
+    if (
+        draft.protocol === 'shadowsocks' &&
+        ['ssMethod', 'ssServerPassword', 'ssNetwork'].some(
+            (key) =>
+                originalDraft[key as keyof InboundEditorDraft] !==
+                draft[key as keyof InboundEditorDraft]
+        )
+    ) {
+        if (!['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm'].includes(draft.ssMethod)) {
+            throw new Error('This method is unavailable for SS2022 Managed Users.')
+        }
+        const size = draft.ssMethod === '2022-blake3-aes-128-gcm' ? 16 : 32
+        let validKey = false
+        try {
+            validKey =
+                atob(draft.ssServerPassword).length === size &&
+                btoa(atob(draft.ssServerPassword)) === draft.ssServerPassword
+        } catch {
+            /* Report a safe validation message, never the supplied key. */
+        }
+        if (!validKey) {
+            throw new Error(`Server key must encode ${size} bytes as base64.`)
+        }
+        if (coreType === 'singbox') {
+            next.method = draft.ssMethod
+            next.password = draft.ssServerPassword
+            if (draft.ssNetwork === 'tcp,udp') delete next.network
+            else next.network = draft.ssNetwork
+        } else {
+            next.settings = {
+                ...object(next.settings),
+                method: draft.ssMethod,
+                password: draft.ssServerPassword,
+                network: draft.ssNetwork
+            }
+        }
+    }
     const keys = new Set([...Object.keys(inbound), ...Object.keys(next)])
     return [...keys].flatMap((key): VisualPatchOperation[] => {
         if (same(inbound[key], next[key])) return []

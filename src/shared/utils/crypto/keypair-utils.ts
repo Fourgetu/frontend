@@ -2,8 +2,18 @@ import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js'
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js'
 /* eslint-disable camelcase */
 import { randomBytes } from '@noble/post-quantum/utils.js'
-import { encodeURLSafe } from '@stablelib/base64'
-import { generateKeyPair } from '@stablelib/x25519'
+import { decodeURLSafe, encodeURLSafe } from '@stablelib/base64'
+import { generateKeyPair, scalarMultBase } from '@stablelib/x25519'
+
+export const deriveX25519PublicKey = (privateKey: string): string => {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(privateKey)) return ''
+    try {
+        const bytes = decodeURLSafe(`${privateKey}=`)
+        return bytes.length === 32 ? encodeURLSafe(scalarMultBase(bytes)).replace(/=/g, '') : ''
+    } catch {
+        return ''
+    }
+}
 
 export const generateX25519 = () => {
     const kp = generateKeyPair()

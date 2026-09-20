@@ -235,7 +235,9 @@ export function ConfigEditorActionsFeature(props: Props) {
             return
         }
 
+        if (coreType !== 'xray' && coreType !== 'singbox') return
         openProtocolPresetsModal({
+            coreType,
             currentConfig: currentConfig as Record<string, unknown>,
             onConfirm: (nextConfig, addedCount) => {
                 if (!editorRef.current) return

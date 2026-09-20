@@ -142,7 +142,7 @@ export function SpeedLimitsPage() {
     const [hostUuid, setHostUuid] = useState<string | null>(null)
     const [speedLimitUuid, setSpeedLimitUuid] = useState<string | null>(null)
     const [externalPort, setExternalPort] = useState<number | string>('')
-    const [network, setNetwork] = useState<'tcp' | 'udp'>('tcp')
+    const [network, setNetwork] = useState<'tcp' | 'udp' | 'tcp,udp'>('tcp')
     const [safetyConfirmed, setSafetyConfirmed] = useState(false)
     const [allowPublicInbound, setAllowPublicInbound] = useState(false)
     const [portHoppingConfigUuid, setPortHoppingConfigUuid] = useState<string | null>(null)
@@ -842,7 +842,7 @@ export function SpeedLimitsPage() {
                             setAllowPublicInbound(false)
                             setSafetyConfirmed(false)
                             const inbound = selectedNodeInbounds.find((item) => item.uuid === value)
-                            setNetwork(getGostForwardNetwork(inbound?.type ?? ''))
+                            setNetwork(getGostForwardNetwork(inbound?.type ?? '', inbound?.network))
                         }}
                         required
                         value={inboundUuid}
@@ -905,7 +905,8 @@ export function SpeedLimitsPage() {
                         <Select
                             data={[
                                 { label: 'TCP', value: 'tcp' },
-                                { label: 'UDP', value: 'udp' }
+                                { label: 'UDP', value: 'udp' },
+                                { label: 'TCP + UDP', value: 'tcp,udp' }
                             ]}
                             description={t('speed-limits.routes.network-derived')}
                             disabled

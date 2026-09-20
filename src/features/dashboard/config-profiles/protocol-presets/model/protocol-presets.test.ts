@@ -1,7 +1,14 @@
 import { decodeURLSafe } from '@stablelib/base64'
 import assert from 'node:assert/strict'
+import { createPublicKey, createPrivateKey } from 'node:crypto'
 import test from 'node:test'
 
+import { appendSingBoxProtocolPresets } from '../../../nodes/quick-deploy/model/singbox-protocol-presets.ts'
+import {
+    SS2022_METHODS,
+    getProtocolPipeline,
+    generateSs2022ServerPassword
+} from './dual-core-capabilities.ts'
 import {
     applyRealityCompatibilityToConfig,
     appendProtocolPresets,
@@ -18,6 +25,104 @@ const tls = {
     certificateFile: '/var/lib/remnawave/configs/xray/ssl/fullchain.pem',
     keyFile: '/var/lib/remnawave/configs/xray/ssl/privkey.key'
 }
+
+for (const core of ['xray', 'singbox'] as const) {
+    for (const capability of SS2022_METHODS) {
+        test(`${core} SS2022 ${capability.method}: managed capability and key size`, () => {
+            const build = () =>
+                core === 'xray'
+                    ? appendProtocolPresets({}, ['shadowsocks-2022'], {
+                          ss2022Method: capability.method
+                      }).added[0].inbound
+                    : appendSingBoxProtocolPresets({}, ['singbox-shadowsocks-2022'], {
+                          tls,
+                          ss2022Method: capability.method
+                      }).added[0].inbound
+            if (!capability.managedUsers) {
+                assert.equal(capability.quickDeploy, false)
+                assert.equal(capability.quickProtocol, false)
+                assert.throws(build, /Managed Users/)
+                return
+            }
+            const inbound = build()
+            const server = core === 'xray' ? (inbound.settings as Record<string, unknown>) : inbound
+            assert.equal(server.method, capability.method)
+            assert.equal(
+                Buffer.from(server.password as string, 'base64').length,
+                capability.keyBytes
+            )
+            assert.deepEqual(core === 'xray' ? server.clients : server.users, [])
+            assert.notEqual(server.password, generateSs2022ServerPassword(capability.method))
+            assert.equal('streamSettings' in inbound, core === 'xray')
+            assert.equal('settings' in inbound, core === 'xray')
+        })
+    }
+}
+
+test('sing-box Reality uses native X25519 keys and no Xray compatibility fields', () => {
+    const result = appendSingBoxProtocolPresets(
+        { keep: { value: true } },
+        ['singbox-vless-reality-vision'],
+        {
+            tls,
+            reality: {
+                targetDomain: 'handshake.example.com',
+                targetPort: 8443,
+                serverName: 'sni.example.com',
+                minClientVer: '26.3.27'
+            }
+        }
+    )
+    const inbound = result.added[0].inbound
+    const nativeTls = inbound.tls as {
+        server_name: string
+        reality: { handshake: object; private_key: string; short_id: string[] }
+    }
+    assert.equal(inbound.type, 'vless')
+    assert.deepEqual(inbound.users, [])
+    assert.equal(nativeTls.server_name, 'sni.example.com')
+    assert.deepEqual(nativeTls.reality.handshake, {
+        server: 'handshake.example.com',
+        server_port: 8443
+    })
+    assert.match(nativeTls.reality.short_id[0], /^[0-9a-f]{16}$/)
+    const key = createPrivateKey({
+        key: { kty: 'OKP', crv: 'X25519', d: nativeTls.reality.private_key, x: '' },
+        format: 'jwk'
+    })
+    assert.equal(createPublicKey(key).export({ format: 'jwk' }).x, result.added[0].realityPublicKey)
+    assert.equal(
+        /streamSettings|realitySettings|serverNames|shortIds|minClientVer/.test(
+            JSON.stringify(inbound)
+        ),
+        false
+    )
+    assert.deepEqual(result.config.keep, { value: true })
+})
+
+test('central matrix distinguishes protocol support from the managed provisioning pipeline', () => {
+    for (const core of ['xray', 'singbox'] as const) {
+        assert.equal(getProtocolPipeline(core, 'shadowsocks-2022')?.quickDeploy, true)
+        assert.equal(getProtocolPipeline(core, 'vless-reality-vision')?.quickProtocol, true)
+    }
+    assert.equal(getProtocolPipeline('xray', 'hysteria2')?.quickProtocol, false)
+    assert.equal(getProtocolPipeline('singbox', 'hysteria2')?.quickProtocol, true)
+    assert.equal(getProtocolPipeline('singbox', 'trojan-tcp-tls')?.quickDeploy, false)
+    const chacha = SS2022_METHODS[2]
+    assert.equal(chacha.xray && chacha.singbox, true)
+    assert.equal(chacha.managedUsers, false)
+})
+
+test('SS2022 server keys use Web Crypto random bytes of the required size', (context) => {
+    const original = globalThis.crypto.getRandomValues.bind(globalThis.crypto)
+    const random = context.mock.method(globalThis.crypto, 'getRandomValues', original)
+    generateSs2022ServerPassword('2022-blake3-aes-128-gcm')
+    generateSs2022ServerPassword('2022-blake3-aes-256-gcm')
+    assert.deepEqual(
+        random.mock.calls.map((call) => (call.arguments[0] as Uint8Array).length),
+        [16, 32]
+    )
+})
 
 test('adds Reality Vision to a blank Config Profile', () => {
     const result = appendProtocolPresets({}, ['vless-reality-vision'])
@@ -64,7 +169,7 @@ test('adds every supported recommendation with unique ports and tags', () => {
     const ports = result.added.map(({ inbound }) => inbound.port)
     const tags = result.added.map(({ inbound }) => inbound.tag)
 
-    assert.equal(result.added.length, 4)
+    assert.equal(result.added.length, 3)
     assert.equal(new Set(ports).size, ports.length)
     assert.equal(new Set(tags).size, tags.length)
     assert.ok(ports.every((port) => port >= 20_000 && port <= 60_000))
@@ -141,20 +246,15 @@ test('Reality Target and Server Name remain independently configurable', () => {
     assert.deepEqual(reality.serverNames, ['sni.example.com'])
 })
 
-test('TLS presets require complete TLS input and Hysteria2 uses h3', () => {
+test('TLS presets require complete TLS input and new Xray Hysteria2 provisioning is closed', () => {
     assert.throws(() => appendProtocolPresets({}, ['trojan-tcp-tls']))
 
-    const result = appendProtocolPresets({}, ['trojan-tcp-tls', 'hysteria2'], { tls })
+    const result = appendProtocolPresets({}, ['trojan-tcp-tls'], { tls })
     const trojan = result.added[0].inbound
-    const hysteria = result.added[1].inbound
-    const hysteriaTls = hysteria.streamSettings.tlsSettings as Record<string, unknown>
 
     assert.equal(trojan.protocol, 'trojan')
     assert.deepEqual(trojan.settings.clients, [])
-    assert.equal(hysteria.protocol, 'hysteria')
-    assert.equal(hysteria.streamSettings.network, 'hysteria')
-    assert.deepEqual(hysteriaTls.alpn, ['h3'])
-    assert.equal((hysteria.streamSettings.hysteriaSettings as { version: number }).version, 2)
+    assert.throws(() => appendProtocolPresets({}, ['hysteria2'], { tls }), /not supported/)
 })
 
 test('VMess is visible as a compatibility item but cannot create a broken config', () => {
@@ -190,7 +290,7 @@ test('Reality gRPC defaults to the same 1.8.1 compatibility version', () => {
 })
 
 test('non-Reality presets do not receive minClientVer', () => {
-    const result = appendProtocolPresets({}, ['trojan-tcp-tls', 'hysteria2'], { tls })
+    const result = appendProtocolPresets({}, ['trojan-tcp-tls'], { tls })
 
     for (const item of result.added) {
         const streamSettings = item.inbound.streamSettings as Record<string, unknown>

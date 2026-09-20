@@ -204,7 +204,12 @@ const parseSingboxInbound = (value: JsonObject, index: number): VisualInbound =>
                 ? value.listen_port
                 : undefined,
         transport: type,
-        security: isObject(value.tls) ? 'tls' : undefined,
+        security:
+            isObject(value.tls) && value.tls.enabled === true
+                ? isObject(value.tls.reality) && value.tls.reality.enabled === true
+                    ? 'reality'
+                    : 'tls'
+                : undefined,
         raw: value,
         readOnly: users,
         readOnlyReason: users ? 'Users are managed by Remnawave.' : undefined

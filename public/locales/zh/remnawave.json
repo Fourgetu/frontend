@@ -1,4 +1,19 @@
 {
+    "dual-core": {
+        "invalid-server-key": "服务端密钥必须是合法 base64：AES-128 对应 16 字节，AES-256 对应 32 字节。",
+        "invalid-reality": "请检查 Reality 握手地址和端口、X25519 私钥以及十六进制 shortId。",
+        "ss-method": "SS2022 加密方法",
+        "ss-description": "支持独立服务端密钥与每用户密钥的托管用户模式，支持 TCP + UDP。",
+        "chacha-managed-unavailable": "ChaCha20：当前 Xray 26.7.28 / sing-box 1.13.14 不支持此 method 的多用户模式。",
+        "server-password": "服务端密码（base64 密钥）",
+        "managed-users": "用户与每用户凭据由 Remnawave 统一管理。",
+        "handshake-port": "Reality 握手端口",
+        "public-key": "Reality 公钥",
+        "private-key": "Reality 私钥",
+        "flow": "flow：xtls-rprx-vision",
+        "cipher-change": "更改加密方法后，需要重新生成长度匹配的服务端密钥。",
+        "generate-key": "生成服务端密钥"
+    },
   "constants": {
     "home": "首页",
     "hosts": "主机",
@@ -2137,7 +2152,7 @@
     },
     "alerts": {
       "explicit-title": "GOST 限速与公开入站兼容模式",
-      "explicit-description": "默认要求入站明确监听本机回环地址。Xray 0.0.0.0 入站可手动开启公开入站兼容模式；原公网端口仍可绕过 GOST。不会自动修改内核监听、防火墙或原有直连线路；删除线路后，订阅恢复使用 Host 端口。",
+      "explicit-description": "默认要求入站明确监听本机回环地址。Xray / sing-box 通配地址入站可手动开启公开入站兼容模式；原公网端口仍可绕过 GOST。不会自动修改内核监听、防火墙或原有直连线路；删除线路后，订阅恢复使用 Host 端口。",
       "assignment-title": "限速绑定线路，而非用户身份",
       "assignment-description": "GOST 会在 Xray 或 sing-box 验证协议凭据之前，根据外部目标端口选择对应的限速桶。若用户知道指向同一入站的其他线路端口，也可能使用该线路对应的限速桶。因此应将外部线路端口视为敏感的分配信息；此模式并不是用于隔离互不信任用户的加密级配额边界。"
     },
@@ -2192,8 +2207,8 @@
       "network-derived": "根据所选代理内核入站自动确定",
       "automatic-port": "自动分配（32000–32999）",
       "safety-confirmation": "我确认此入站有意使用 GOST 限速模式，并且已阻止通过代理内核端口直接公开访问。",
-      "public-compatibility": "公开入站兼容模式（仅 Xray 0.0.0.0）",
-      "public-compatibility-warning": "开启后，GOST 使用新分配的公网端口，经 127.0.0.1 转发到原 Xray 入站。只有经过 GOST 的连接受到限速；原公网内核端口仍可直连、绕过限速。不会自动修改 Xray 配置或防火墙。",
+      "public-compatibility": "公开入站兼容模式（Xray / sing-box 0.0.0.0 或 ::）",
+      "public-compatibility-warning": "开启后，GOST 使用新分配的公网端口，经本机回环地址转发到原入站。只有经过 GOST 的连接受到限速；原公网内核端口仍可直连、绕过限速。不会自动修改内核配置或防火墙。",
       "public-compatibility-confirmation": "我理解原公网内核端口仍可绕过 GOST 限速，并确认以公开入站兼容模式创建此线路。",
       "create-and-verify": "创建并验证运行状态"
     },

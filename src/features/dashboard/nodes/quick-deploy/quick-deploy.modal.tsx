@@ -44,6 +44,7 @@ import {
 import { LoadingScreen } from '@shared/ui'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
+import { Ss2022MethodSelect } from '../../config-profiles/protocol-presets/ss2022-method-select'
 import { quickDeployApi } from './api/quick-deploy-api.ts'
 import {
     getCoreCapabilities,
@@ -612,6 +613,12 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                 value={parameters.serverDescription}
                             />
 
+                            {parameters.presetIds.some((id) => id.includes('shadowsocks-2022')) && (
+                                <Ss2022MethodSelect
+                                    value={parameters.ss2022Method}
+                                    onChange={(value) => setParameter('ss2022Method', value)}
+                                />
+                            )}
                             {needsReality && (
                                 <Card padding="md" withBorder>
                                     <Stack>
@@ -649,94 +656,114 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                             required
                                             value={parameters.reality.serverName}
                                         />
-                                        <Select
-                                            data={[
-                                                {
-                                                    label: `${t('quick-deploy.compatibility-compatible')} (${REALITY_CLIENT_COMPATIBILITY.compatible})`,
-                                                    value: REALITY_CLIENT_COMPATIBILITY.compatible
-                                                },
-                                                {
-                                                    label: `${t('quick-deploy.compatibility-mihomo')} (${REALITY_CLIENT_COMPATIBILITY.mihomo})`,
-                                                    value: REALITY_CLIENT_COMPATIBILITY.mihomo
-                                                },
-                                                {
-                                                    label: `${t('quick-deploy.compatibility-xray')} (${REALITY_CLIENT_COMPATIBILITY.xray})`,
-                                                    value: REALITY_CLIENT_COMPATIBILITY.xray
-                                                },
-                                                {
-                                                    label: `${t('quick-deploy.compatibility-unrestricted')} (${REALITY_CLIENT_COMPATIBILITY.unrestricted})`,
-                                                    value: REALITY_CLIENT_COMPATIBILITY.unrestricted
-                                                }
-                                            ]}
-                                            description={t(
-                                                'quick-deploy.reality-compatibility-help'
-                                            )}
-                                            label={t('quick-deploy.reality-min-client-version')}
-                                            onChange={(value) =>
-                                                value &&
-                                                setParameter('reality', {
-                                                    ...parameters.reality,
-                                                    minClientVer: value
-                                                })
-                                            }
-                                            value={parameters.reality.minClientVer}
-                                        />
-                                        {parameters.reality.minClientVer ===
-                                            REALITY_CLIENT_COMPATIBILITY.mihomo && (
-                                            <Alert color="yellow" icon={<TbAlertTriangle />}>
-                                                {t('quick-deploy.reality-warning-mihomo')}
-                                            </Alert>
-                                        )}
-                                        {parameters.reality.minClientVer ===
-                                            REALITY_CLIENT_COMPATIBILITY.xray && (
-                                            <Alert color="red" icon={<TbAlertTriangle />}>
-                                                {t('quick-deploy.reality-warning-xray')}
-                                            </Alert>
-                                        )}
-                                        {parameters.reality.minClientVer ===
-                                            REALITY_CLIENT_COMPATIBILITY.unrestricted && (
-                                            <Alert color="orange" icon={<TbAlertTriangle />}>
-                                                {t('quick-deploy.reality-warning-unrestricted')}
-                                            </Alert>
-                                        )}
-                                        {selectedExistingRealityWithoutVersion?.length ? (
-                                            <Checkbox
-                                                checked={Boolean(
-                                                    parameters.updateExistingRealityCompatibility
-                                                )}
-                                                label={t(
-                                                    'quick-deploy.apply-existing-reality-compatibility'
-                                                )}
-                                                onChange={(event) =>
-                                                    setParameter(
-                                                        'updateExistingRealityCompatibility',
-                                                        event.currentTarget.checked
-                                                    )
-                                                }
-                                            />
-                                        ) : null}
-                                        {selectedExistingRealityWithoutVersion?.length ? (
-                                            <Alert color="orange" icon={<TbAlertTriangle />}>
-                                                {t(
-                                                    'quick-deploy.existing-reality-missing-version',
-                                                    {
-                                                        tags: selectedExistingRealityWithoutVersion
-                                                            .map((inbound) => inbound.tag)
-                                                            .join(', ')
+                                        {parameters.coreType === 'xray' && (
+                                            <>
+                                                <Select
+                                                    data={[
+                                                        {
+                                                            label: `${t('quick-deploy.compatibility-compatible')} (${REALITY_CLIENT_COMPATIBILITY.compatible})`,
+                                                            value: REALITY_CLIENT_COMPATIBILITY.compatible
+                                                        },
+                                                        {
+                                                            label: `${t('quick-deploy.compatibility-mihomo')} (${REALITY_CLIENT_COMPATIBILITY.mihomo})`,
+                                                            value: REALITY_CLIENT_COMPATIBILITY.mihomo
+                                                        },
+                                                        {
+                                                            label: `${t('quick-deploy.compatibility-xray')} (${REALITY_CLIENT_COMPATIBILITY.xray})`,
+                                                            value: REALITY_CLIENT_COMPATIBILITY.xray
+                                                        },
+                                                        {
+                                                            label: `${t('quick-deploy.compatibility-unrestricted')} (${REALITY_CLIENT_COMPATIBILITY.unrestricted})`,
+                                                            value: REALITY_CLIENT_COMPATIBILITY.unrestricted
+                                                        }
+                                                    ]}
+                                                    description={t(
+                                                        'quick-deploy.reality-compatibility-help'
+                                                    )}
+                                                    label={t(
+                                                        'quick-deploy.reality-min-client-version'
+                                                    )}
+                                                    onChange={(value) =>
+                                                        value &&
+                                                        setParameter('reality', {
+                                                            ...parameters.reality,
+                                                            minClientVer: value
+                                                        })
                                                     }
+                                                    value={parameters.reality.minClientVer}
+                                                />
+                                                {parameters.reality.minClientVer ===
+                                                    REALITY_CLIENT_COMPATIBILITY.mihomo && (
+                                                    <Alert
+                                                        color="yellow"
+                                                        icon={<TbAlertTriangle />}
+                                                    >
+                                                        {t('quick-deploy.reality-warning-mihomo')}
+                                                    </Alert>
                                                 )}
-                                            </Alert>
-                                        ) : null}
-                                        <Text c="dimmed" size="xs">
-                                            {t('quick-deploy.current-reality-compatibility', {
-                                                mihomo: realityCompatibility.mihomo
-                                                    ? t('quick-deploy.compatible')
-                                                    : t('quick-deploy.may-not-connect'),
-                                                singbox: realityCompatibility.singbox
-                                                    ? t('quick-deploy.compatible')
-                                                    : t('quick-deploy.may-not-connect')
-                                            })}
-                                        </Text>
+                                                {parameters.reality.minClientVer ===
+                                                    REALITY_CLIENT_COMPATIBILITY.xray && (
+                                                    <Alert color="red" icon={<TbAlertTriangle />}>
+                                                        {t('quick-deploy.reality-warning-xray')}
+                                                    </Alert>
+                                                )}
+                                                {parameters.reality.minClientVer ===
+                                                    REALITY_CLIENT_COMPATIBILITY.unrestricted && (
+                                                    <Alert
+                                                        color="orange"
+                                                        icon={<TbAlertTriangle />}
+                                                    >
+                                                        {t(
+                                                            'quick-deploy.reality-warning-unrestricted'
+                                                        )}
+                                                    </Alert>
+                                                )}
+                                                {selectedExistingRealityWithoutVersion?.length ? (
+                                                    <Checkbox
+                                                        checked={Boolean(
+                                                            parameters.updateExistingRealityCompatibility
+                                                        )}
+                                                        label={t(
+                                                            'quick-deploy.apply-existing-reality-compatibility'
+                                                        )}
+                                                        onChange={(event) =>
+                                                            setParameter(
+                                                                'updateExistingRealityCompatibility',
+                                                                event.currentTarget.checked
+                                                            )
+                                                        }
+                                                    />
+                                                ) : null}
+                                                {selectedExistingRealityWithoutVersion?.length ? (
+                                                    <Alert
+                                                        color="orange"
+                                                        icon={<TbAlertTriangle />}
+                                                    >
+                                                        {t(
+                                                            'quick-deploy.existing-reality-missing-version',
+                                                            {
+                                                                tags: selectedExistingRealityWithoutVersion
+                                                                    .map((inbound) => inbound.tag)
+                                                                    .join(', ')
+                                                            }
+                                                        )}
+                                                    </Alert>
+                                                ) : null}
+                                                <Text c="dimmed" size="xs">
+                                                    {t(
+                                                        'quick-deploy.current-reality-compatibility',
+                                                        {
+                                                            mihomo: realityCompatibility.mihomo
+                                                                ? t('quick-deploy.compatible')
+                                                                : t('quick-deploy.may-not-connect'),
+                                                            singbox: realityCompatibility.singbox
+                                                                ? t('quick-deploy.compatible')
+                                                                : t('quick-deploy.may-not-connect')
+                                                        }
+                                                    )}
+                                                </Text>
+                                            </>
+                                        )}
                                     </Stack>
                                 </Card>
                             )}
@@ -853,13 +880,14 @@ export const QuickDeployNodeModal = NiceModal.create(() => {
                                     {t('quick-deploy.profile-switch-preview')}
                                 </Alert>
                             )}
-                            {plan.hosts.some((item) => item.security === 'reality') && (
-                                <Alert color="blue" icon={<TbAlertTriangle />}>
-                                    {t('quick-deploy.preview-reality-compatibility', {
-                                        version: plan.parameters.reality.minClientVer
-                                    })}
-                                </Alert>
-                            )}
+                            {parameters.coreType === 'xray' &&
+                                plan.hosts.some((item) => item.security === 'reality') && (
+                                    <Alert color="blue" icon={<TbAlertTriangle />}>
+                                        {t('quick-deploy.preview-reality-compatibility', {
+                                            version: plan.parameters.reality.minClientVer
+                                        })}
+                                    </Alert>
+                                )}
                             <Text size="sm">
                                 {t('quick-deploy.preview-summary', {
                                     inbounds: plan.inbounds.filter((item) => item.willCreateInbound)

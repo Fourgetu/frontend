@@ -1,4 +1,19 @@
 {
+  "dual-core": {
+    "invalid-server-key": "The server key must be valid base64: 16 bytes for AES-128 or 32 bytes for AES-256.",
+    "invalid-reality": "Check the Reality handshake host/port, X25519 private key and hexadecimal short IDs.",
+    "ss-method": "SS2022 method",
+    "ss-description": "Managed Users with separate server and per-user keys, TCP + UDP.",
+    "chacha-managed-unavailable": "Xray 26.7.28 / sing-box 1.13.14 do not support multi-user mode for this ChaCha20 method.",
+    "server-password": "Server password (base64 key)",
+    "managed-users": "Users and per-user credentials are managed by Remnawave.",
+    "handshake-port": "Reality handshake port",
+    "public-key": "Reality public key",
+    "private-key": "Reality private key",
+    "flow": "Flow: xtls-rprx-vision",
+    "cipher-change": "Changing the method requires regenerating a server key of the correct size.",
+    "generate-key": "Generate server key"
+  },
   "constants": {
     "home": "Home",
     "hosts": "Hosts",
@@ -2138,7 +2153,7 @@
     },
     "alerts": {
       "explicit-title": "GOST limiting and public-inbound compatibility",
-      "explicit-description": "An explicit loopback listener is required by default. Xray 0.0.0.0 inbounds may opt into public-inbound compatibility; the original public port can still bypass GOST. Core listeners, firewall rules and existing direct routes are never changed automatically. Removing the route restores the subscription to the Host port.",
+      "explicit-description": "An explicit loopback listener is required by default. Xray/sing-box wildcard listeners may opt into public-inbound compatibility; the original public port can still bypass GOST. Core listeners, firewall rules and existing direct routes are never changed automatically. Removing the route restores the subscription to the Host port.",
       "assignment-title": "Route-assigned limit, not identity-bound",
       "assignment-description": "GOST selects the limiter bucket from the external destination port before Xray or sing-box authenticates the protocol credential. A user who knows another route port targeting the same inbound may select that route's bucket. Treat external route ports as sensitive assignment data; this mode is not a cryptographic quota boundary between mutually hostile users."
     },
@@ -2193,8 +2208,8 @@
       "network-derived": "Derived from the selected proxy-core inbound",
       "automatic-port": "Automatic (32000–32999)",
       "safety-confirmation": "I confirm this inbound is intentionally in GOST limiter mode and direct public access to its proxy-core port is blocked.",
-      "public-compatibility": "Public-inbound compatibility (Xray 0.0.0.0 only)",
-      "public-compatibility-warning": "GOST uses a newly allocated public port and forwards through 127.0.0.1 to the existing Xray inbound. Only traffic through GOST is rate limited; the original public core port remains directly accessible and can bypass limits. Xray configuration and firewall rules are not changed automatically.",
+      "public-compatibility": "Public-inbound compatibility (Xray / sing-box 0.0.0.0 or ::)",
+      "public-compatibility-warning": "GOST uses a newly allocated public port and forwards through loopback to the existing inbound. Only traffic through GOST is rate limited; the original public core port remains directly accessible and can bypass limits. Core configuration and firewall rules are not changed automatically.",
       "public-compatibility-confirmation": "I understand that the original public core port can bypass GOST limits and confirm creating this route in public-inbound compatibility mode.",
       "create-and-verify": "Create and verify runtime"
     },

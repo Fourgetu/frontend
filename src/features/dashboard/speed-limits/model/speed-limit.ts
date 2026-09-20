@@ -16,7 +16,7 @@ export const isLoopbackAddress = (value: unknown): value is '127.0.0.1' | '::1' 
     value === '127.0.0.1' || value === '::1'
 
 export const isPublicInboundCompatibilityAvailable = (coreType: unknown, listen: unknown) =>
-    coreType === 'xray' && listen === '0.0.0.0'
+    (coreType === 'xray' || coreType === 'singbox') && (listen === '0.0.0.0' || listen === '::')
 
 export const resolveGostTargetAddress = (
     listen: unknown,
@@ -25,13 +25,22 @@ export const resolveGostTargetAddress = (
 ): '127.0.0.1' | '::1' | undefined => {
     if (isLoopbackAddress(listen)) return listen
     if (allowPublicInbound && isPublicInboundCompatibilityAvailable(coreType, listen)) {
-        return '127.0.0.1'
+        return listen === '::' ? '::1' : '127.0.0.1'
     }
     return undefined
 }
 
-export const getGostForwardNetwork = (inboundType: string): 'tcp' | 'udp' =>
-    inboundType.toLowerCase().includes('hysteria') ? 'udp' : 'tcp'
+export const getGostForwardNetwork = (
+    inboundType: string,
+    network?: unknown
+): 'tcp' | 'udp' | 'tcp,udp' =>
+    inboundType.toLowerCase().includes('hysteria')
+        ? 'udp'
+        : inboundType === 'shadowsocks'
+          ? network === 'tcp' || network === 'udp'
+              ? network
+              : 'tcp,udp'
+          : 'tcp'
 
 interface HostRouteCandidate {
     inbound: {
@@ -80,7 +89,7 @@ interface CreateUserRoutePayloadInput {
     allowPublicInbound: boolean
     internalAddress: '127.0.0.1' | '::1'
     internalPort: number
-    network: 'tcp' | 'udp'
+    network: 'tcp' | 'udp' | 'tcp,udp'
 }
 
 export const buildCreateUserRoutePayload = ({

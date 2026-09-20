@@ -10,7 +10,7 @@ interface UserRouteEditSource extends UserRouteEditValues {
 interface UserRouteHoppingSource {
     portHoppingConfigUuid: string | null
     configProfileInboundUuid: string
-    network: 'tcp' | 'udp'
+    network: 'tcp' | 'udp' | 'tcp,udp'
 }
 
 interface UserRouteHoppingConfig {

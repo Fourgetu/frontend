@@ -2,6 +2,7 @@ import type { CreateHostCommand } from '@remnawave/backend-contract'
 
 import type { CertificateSource } from '@shared/tls'
 
+import { getManagedSs2022Method } from '../../../config-profiles/protocol-presets/model/dual-core-capabilities.ts'
 import {
     appendProtocolPresets,
     PROTOCOL_PRESETS,
@@ -82,6 +83,7 @@ export interface QuickDeployHost {
 }
 
 export interface QuickDeployParameters {
+    ss2022Method?: ProtocolPresetBuildOptions['ss2022Method']
     coreType: ProxyCoreType
     hostAddress: string
     createOptionalHosts?: boolean
@@ -246,6 +248,9 @@ const xrayPresetIds = new Set<QuickDeployProtocolId>(
 export const getPresetIdFromTag = (tag: string): QuickDeployProtocolId | undefined =>
     (
         [
+            'singbox-vless-reality-vision',
+            'singbox-shadowsocks-2022',
+            'shadowsocks-2022',
             'vless-reality-vision',
             'vless-reality-grpc',
             'trojan-tcp-tls',
@@ -347,13 +352,22 @@ const getHostAlpn = (inbound: QuickDeployInbound): CreateHostCommand.RequestBody
 
 const findExistingInbound = (
     profile: QuickDeployProfile,
-    presetId: QuickDeployProtocolId
+    presetId: QuickDeployProtocolId,
+    method: string = '2022-blake3-aes-128-gcm'
 ): QuickDeployInboundRecord | undefined =>
     profile.inbounds.find(
         (inbound) =>
             inbound.tag.startsWith(`${presetId}-`) &&
             inbound.rawInbound !== null &&
-            typeof inbound.rawInbound === 'object'
+            typeof inbound.rawInbound === 'object' &&
+            (!presetId.includes('shadowsocks-2022') ||
+                ((inbound.rawInbound as Record<string, unknown>).type === 'shadowsocks'
+                    ? (inbound.rawInbound as Record<string, unknown>).method
+                    : (
+                          (inbound.rawInbound as Record<string, unknown>).settings as
+                              | Record<string, unknown>
+                              | undefined
+                      )?.method) === method)
     )
 
 const findExistingHost = (
@@ -399,6 +413,7 @@ const validateParameters = (parameters: QuickDeployParameters): void => {
 
     for (const id of parameters.presetIds) {
         assertQuickDeployCapabilityEnabled(parameters.coreType, id)
+        if (id.includes('shadowsocks-2022')) getManagedSs2022Method(parameters.ss2022Method)
     }
     const needsHostAddress = parameters.presetIds.some(
         (id) =>
@@ -431,7 +446,7 @@ export const createQuickDeploymentPlan = (
     const config = asRecord(profile.config, 'Config Profile config')
     const existingByPreset = new Map(
         parameters.presetIds.flatMap((presetId) => {
-            const inbound = findExistingInbound(profile, presetId)
+            const inbound = findExistingInbound(profile, presetId, parameters.ss2022Method)
             return inbound ? [[presetId, inbound] as const] : []
         })
     )
@@ -443,6 +458,8 @@ export const createQuickDeploymentPlan = (
     const generated = (() => {
         if (parameters.coreType === 'singbox') {
             return appendSingBoxProtocolPresets(config, missingPresetIds, {
+                reality: parameters.reality,
+                ss2022Method: parameters.ss2022Method,
                 tls: parameters.tls,
                 reservedTags,
                 reservedPorts
@@ -453,6 +470,7 @@ export const createQuickDeploymentPlan = (
             config,
             missingPresetIds.filter((id) => xrayPresetIds.has(id as never)) as never[],
             {
+                ss2022Method: parameters.ss2022Method,
                 reality: {
                     ...parameters.reality,
                     minClientVer: normalizeRealityMinClientVersion(parameters.reality.minClientVer)
@@ -535,9 +553,12 @@ export const createQuickDeploymentPlan = (
               : 'tcp'
         const security = isXrayInbound(item.inbound)
             ? (getString(getStreamSettings(item.inbound), 'security') ?? 'none')
-            : item.inbound.tls
-              ? 'tls'
-              : 'none'
+            : (item.inbound.tls as { reality?: { enabled?: boolean } } | undefined)?.reality
+                    ?.enabled
+              ? 'reality'
+              : item.inbound.tls
+                ? 'tls'
+                : 'none'
 
         return {
             presetId: item.presetId,
