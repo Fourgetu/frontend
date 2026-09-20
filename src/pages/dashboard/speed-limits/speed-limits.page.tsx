@@ -1,5 +1,6 @@
 import { EditUserRouteModal } from '@features/dashboard/speed-limits/components/edit-user-route-modal'
 import {
+    buildCreateUserRoutePayload,
     bytesPerSecondToMbps,
     getGostForwardNetwork,
     isHostCompatibleWithUserRoute,
@@ -385,20 +386,19 @@ export function SpeedLimitsPage() {
         }
 
         createRoute.mutate({
-            variables: {
-                userId: Number(userId),
+            variables: buildCreateUserRoutePayload({
+                userId,
                 nodeUuid,
-                configProfileInboundUuid: inboundUuid,
+                inboundUuid,
                 hostUuid,
-                speedLimitUuid: speedLimitUuid || null,
-                portHoppingConfigUuid: portHoppingConfigUuid || null,
-                ...(typeof externalPort === 'number' ? { externalPort } : {}),
-                ...(usePublicCompatibility ? { allowPublicInbound: true } : {}),
+                speedLimitUuid,
+                portHoppingConfigUuid,
+                externalPort,
+                allowPublicInbound: usePublicCompatibility,
                 internalAddress: gostTargetAddress,
                 internalPort: selectedInbound.port,
-                network,
-                enabled: true
-            },
+                network
+            }),
             mutationFns: {
                 onSuccess: () => {
                     routeModal.close()

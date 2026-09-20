@@ -4,6 +4,9 @@ type TranslationKey =
     | 'speed-limits.api.create-route-error'
     | 'speed-limits.api.create-route-unknown-error'
     | 'speed-limits.api.update-route-error'
+    | 'speed-limits.api.hopping-allocation-failed'
+    | 'speed-limits.api.hopping-config-incompatible'
+    | 'speed-limits.api.hopping-runtime-failed'
     | 'speed-limits.api.runtime-sync-failed'
     | 'speed-limits.api.runtime-confirmed'
     | 'speed-limits.api.route-created'
@@ -30,14 +33,35 @@ interface RouteMutationFeedback {
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
     value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined
 
-const isRuntimeSyncError = (error: unknown): boolean => {
+const getApiErrorBody = (error: unknown): Record<string, unknown> | undefined => {
     const record = asRecord(error)
     const response = asRecord(record?.response)
     const responseBody = asRecord(response?.data)
     const cause = asRecord(record?.cause)
 
-    // handleRequestError retains the API error body as Error.cause.
-    return cause?.errorCode === 'A271' || responseBody?.errorCode === 'A271'
+    return cause ?? responseBody
+}
+
+const resolveErrorMessageKey = (error: unknown): TranslationKey => {
+    const body = getApiErrorBody(error)
+    const errorCode = body?.errorCode
+    const message = typeof body?.message === 'string' ? body.message : ''
+
+    if (errorCode === 'A271' && /port hopping|nftables|net_admin|ingress/i.test(message)) {
+        return 'speed-limits.api.hopping-runtime-failed'
+    }
+    if (errorCode === 'A271') return 'speed-limits.api.runtime-sync-failed'
+    if (
+        errorCode === 'A266' &&
+        /unable to (allocate|update) (?:a |the )?hysteria2 hopping/i.test(message)
+    ) {
+        return 'speed-limits.api.hopping-allocation-failed'
+    }
+    if (errorCode === 'A266' && /port hopping requires/i.test(message)) {
+        return 'speed-limits.api.hopping-config-incompatible'
+    }
+
+    return 'speed-limits.api.create-route-unknown-error'
 }
 
 export const createUserRouteMutationCallbacks = ({
@@ -66,11 +90,7 @@ export const createUserRouteMutationCallbacks = ({
                     ? 'speed-limits.api.update-route-error'
                     : 'speed-limits.api.create-route-error'
             ),
-            message: translate(
-                isRuntimeSyncError(error)
-                    ? 'speed-limits.api.runtime-sync-failed'
-                    : 'speed-limits.api.create-route-unknown-error'
-            )
+            message: translate(resolveErrorMessageKey(error))
         })
     }
 })

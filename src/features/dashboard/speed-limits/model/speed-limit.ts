@@ -69,6 +69,47 @@ interface UserRouteFormState {
     allowPublicInbound?: boolean
 }
 
+interface CreateUserRoutePayloadInput {
+    userId: string
+    nodeUuid: string
+    inboundUuid: string
+    hostUuid: string
+    speedLimitUuid: string | null
+    portHoppingConfigUuid: string | null
+    externalPort: number | string
+    allowPublicInbound: boolean
+    internalAddress: '127.0.0.1' | '::1'
+    internalPort: number
+    network: 'tcp' | 'udp'
+}
+
+export const buildCreateUserRoutePayload = ({
+    userId,
+    nodeUuid,
+    inboundUuid,
+    hostUuid,
+    speedLimitUuid,
+    portHoppingConfigUuid,
+    externalPort,
+    allowPublicInbound,
+    internalAddress,
+    internalPort,
+    network
+}: CreateUserRoutePayloadInput) => ({
+    userId: Number(userId),
+    nodeUuid,
+    configProfileInboundUuid: inboundUuid,
+    hostUuid,
+    speedLimitUuid: speedLimitUuid || null,
+    portHoppingConfigUuid: portHoppingConfigUuid || null,
+    ...(typeof externalPort === 'number' ? { externalPort } : {}),
+    ...(allowPublicInbound ? { allowPublicInbound: true } : {}),
+    internalAddress,
+    internalPort,
+    network,
+    enabled: true
+})
+
 export const isHostCompatibleWithUserRoute = (
     host: HostRouteCandidate,
     nodeUuid: string,

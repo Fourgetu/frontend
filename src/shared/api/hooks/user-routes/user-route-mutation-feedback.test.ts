@@ -62,6 +62,15 @@ const runtimeAxiosError = () =>
         }
     )
 
+const routeAxiosError = (errorCode: string, message: string, status = 400) =>
+    new AxiosError('Request failed', 'ERR_BAD_RESPONSE', undefined, undefined, {
+        status,
+        statusText: 'Request failed',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+        data: { errorCode, message }
+    })
+
 const normalizeRuntimeError = () => {
     try {
         handleRequestError(runtimeAxiosError())
@@ -135,6 +144,46 @@ test('a generic gateway 502 or A271 text without the API code is not mislabeled 
             'Unable to complete the user route operation. Refresh the route list to check its status before retrying.'
         )
     }
+})
+
+test('hopping allocation and compatibility failures show specific localized guidance', () => {
+    const { callbacks, notifications } = createFeedback('zh')
+    callbacks.onError(
+        routeAxiosError('A266', 'Unable to allocate a Hysteria2 hopping range: no free block')
+    )
+    callbacks.onError(
+        routeAxiosError(
+            'A266',
+            'Port hopping requires an enabled config for the selected sing-box Hysteria2 inbound'
+        )
+    )
+
+    assert.deepEqual(
+        notifications.map(({ message }) => message),
+        [
+            '无法分配 Hysteria2 端口跳跃范围，请检查端口池容量和端口冲突。',
+            '端口跳跃配置与当前 sing-box Hysteria2 入站不兼容。'
+        ]
+    )
+})
+
+test('Node nftables failure is distinguished from generic GOST or TLS failure', () => {
+    const { callbacks, notifications } = createFeedback('zh', 'update')
+    callbacks.onError(
+        routeAxiosError(
+            'A271',
+            'Port hopping ingress did not apply: nftables requires NET_ADMIN',
+            502
+        )
+    )
+
+    assert.deepEqual(notifications, [
+        {
+            color: 'red',
+            title: '更新用户线路失败',
+            message: 'Node Port Hopping 规则应用失败，请检查 nftables 和 NET_ADMIN 权限。'
+        }
+    ])
 })
 
 test('failed route mutation ends pending, reports the error once and does not run success actions', async () => {

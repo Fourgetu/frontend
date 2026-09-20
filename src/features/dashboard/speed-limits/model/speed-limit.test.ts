@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { isPublicInboundCompatibilityAvailable, resolveGostTargetAddress } from './speed-limit.ts'
+import {
+    buildCreateUserRoutePayload,
+    isPublicInboundCompatibilityAvailable,
+    resolveGostTargetAddress
+} from './speed-limit.ts'
 import {
     bytesPerSecondToMbps,
     getGostForwardNetwork,
@@ -145,6 +149,68 @@ test('port hopping is optional and does not participate in base route readiness'
         }),
         true
     )
+})
+
+test('create payload differs only by the hopping UUID when automatic port allocation is used', () => {
+    const base = {
+        userId: '6',
+        nodeUuid: VMRACK_NODE_UUID,
+        inboundUuid: SINGBOX_INBOUND_UUID,
+        hostUuid: compatibleSingBoxHost.uuid,
+        speedLimitUuid: null,
+        externalPort: '',
+        allowPublicInbound: false,
+        internalAddress: '127.0.0.1' as const,
+        internalPort: 35_579,
+        network: 'udp' as const
+    }
+    const withoutHopping = buildCreateUserRoutePayload({
+        ...base,
+        portHoppingConfigUuid: null
+    })
+    const hoppingUuid = '00000000-0000-4000-8000-000000000008'
+    const withHopping = buildCreateUserRoutePayload({
+        ...base,
+        portHoppingConfigUuid: hoppingUuid
+    })
+
+    assert.deepEqual(withoutHopping, {
+        userId: 6,
+        nodeUuid: VMRACK_NODE_UUID,
+        configProfileInboundUuid: SINGBOX_INBOUND_UUID,
+        hostUuid: compatibleSingBoxHost.uuid,
+        speedLimitUuid: null,
+        portHoppingConfigUuid: null,
+        internalAddress: '127.0.0.1',
+        internalPort: 35_579,
+        network: 'udp',
+        enabled: true
+    })
+    assert.deepEqual(withHopping, {
+        ...withoutHopping,
+        portHoppingConfigUuid: hoppingUuid
+    })
+    assert.equal(Object.hasOwn(withoutHopping, 'externalPort'), false)
+    assert.equal(Object.hasOwn(withHopping, 'externalPort'), false)
+})
+
+test('manual external port remains independent from the hopping pool', () => {
+    const payload = buildCreateUserRoutePayload({
+        userId: '6',
+        nodeUuid: VMRACK_NODE_UUID,
+        inboundUuid: SINGBOX_INBOUND_UUID,
+        hostUuid: compatibleSingBoxHost.uuid,
+        speedLimitUuid: null,
+        portHoppingConfigUuid: '00000000-0000-4000-8000-000000000008',
+        externalPort: 32_123,
+        allowPublicInbound: false,
+        internalAddress: '127.0.0.1',
+        internalPort: 35_579,
+        network: 'udp'
+    })
+
+    assert.equal(payload.externalPort, 32_123)
+    assert.equal(payload.portHoppingConfigUuid, '00000000-0000-4000-8000-000000000008')
 })
 
 test('disables route submission without a host or confirmation', () => {
