@@ -2,13 +2,13 @@ import { MRT_ColumnDef } from '@kastov/mantine-react-table-open'
 import { Badge, ComboboxItem, Group, SelectProps, Stack, Text, Tooltip } from '@mantine/core'
 import {
     GetNodesCommand,
-    GetUsersCommand,
     GetExternalSquadsCommand,
     GetInternalSquadsCommand
 } from '@remnawave/backend-contract'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CustomUser } from '@shared/api/types/user-traffic-reset.schema'
 import { prettifyBytesUtil } from '@shared/utils/bytes'
 import { formatInt } from '@shared/utils/misc'
 import { formatTimeUtil } from '@shared/utils/time-utils'
@@ -42,7 +42,7 @@ export const useUserTableColumns = (
 ) => {
     const { t, i18n } = useTranslation()
 
-    return useMemo<MRT_ColumnDef<GetUsersCommand.Response['response']['users'][number]>[]>(
+    return useMemo<MRT_ColumnDef<CustomUser>[]>(
         () => [
             {
                 accessorKey: 'username',

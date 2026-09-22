@@ -2,7 +2,7 @@ import { Select, Stack } from '@mantine/core'
 import { DateTimePicker, getTimeRange } from '@mantine/dates'
 import { UseFormReturnType } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
-import { BulkUpdateUsersCommand, GetExternalSquadsCommand } from '@remnawave/backend-contract'
+import { GetExternalSquadsCommand } from '@remnawave/backend-contract'
 import dayjs from 'dayjs'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useState } from 'react'
@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { PiCalendarDuotone } from 'react-icons/pi'
 import { TbShield, TbStatusChange, TbWebhook } from 'react-icons/tb'
 
+import { CustomBulkUpdateUsersRequest } from '@shared/api/types/user-traffic-reset.schema'
 import { userStatusValues } from '@shared/constants/forms'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
@@ -17,7 +18,7 @@ import { SectionCard } from '@shared/ui/section-card'
 interface IProps {
     cardVariants: Variants
     externalSquads: GetExternalSquadsCommand.Response['response'] | undefined
-    form: UseFormReturnType<BulkUpdateUsersCommand.RequestBody>
+    form: UseFormReturnType<CustomBulkUpdateUsersRequest>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
@@ -56,9 +57,7 @@ export const BulkAccessSettingsCard = (props: IProps) => {
                             data={userStatusValues.filter(
                                 (status) => status.value !== 'EXPIRED' && status.value !== 'LIMITED'
                             )}
-                            description={t(
-                                'common.field.user-status'
-                            )}
+                            description={t('common.field.user-status')}
                             key={form.key('fields.status')}
                             label={t('common.field.status')}
                             leftSection={<TbStatusChange size="16px" />}

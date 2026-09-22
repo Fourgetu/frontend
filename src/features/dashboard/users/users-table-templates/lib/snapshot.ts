@@ -1,9 +1,10 @@
 import { MRT_TableInstance } from '@kastov/mantine-react-table-open'
-import { GetUsersCommand } from '@remnawave/backend-contract'
+
+import { CustomUser } from '@shared/api/types/user-traffic-reset.schema'
 
 import { UsersTableTemplateSnapshot } from '@entities/dashboard/users/users-table-templates-store'
 
-type UserRow = GetUsersCommand.Response['response']['users'][number]
+type UserRow = CustomUser
 type UsersTable = MRT_TableInstance<UserRow>
 
 export const captureSnapshot = (table: UsersTable): UsersTableTemplateSnapshot => {

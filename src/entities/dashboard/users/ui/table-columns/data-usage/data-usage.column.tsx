@@ -1,7 +1,7 @@
 import { Box, Group, Progress, Text } from '@mantine/core'
-import { RESET_PERIODS } from '@remnawave/backend-contract'
 import { useTranslation } from 'react-i18next'
 
+import { USER_RESET_PERIODS } from '@shared/api/types/user-traffic-reset.schema'
 import { prettifyBytesUtil } from '@shared/utils/bytes'
 
 import { IProps } from '@entities/dashboard/users/ui/table-columns/username/interface'
@@ -18,11 +18,14 @@ export function DataUsageColumnEntity(props: IProps) {
     const percentage = isUnlimited ? 0 : (usedBytes * 100) / limitBytes
 
     const strategy = {
-        [RESET_PERIODS.MONTH]: t('data-usage.column.monthly'),
-        [RESET_PERIODS.WEEK]: t('data-usage.column.weekly'),
-        [RESET_PERIODS.DAY]: t('data-usage.column.daily'),
-        [RESET_PERIODS.MONTH_ROLLING]: `${t('data-usage.column.monthly')} ↻`,
-        [RESET_PERIODS.NO_RESET]: '∞'
+        [USER_RESET_PERIODS.MONTH]: t('data-usage.column.monthly'),
+        [USER_RESET_PERIODS.WEEK]: t('data-usage.column.weekly'),
+        [USER_RESET_PERIODS.DAY]: t('data-usage.column.daily'),
+        [USER_RESET_PERIODS.MONTH_ROLLING]: `${t('data-usage.column.monthly')} ↻`,
+        [USER_RESET_PERIODS.MONTH_CUSTOM_DAY]: t('data-usage.column.monthly-custom-day', {
+            day: user.trafficLimitResetDay
+        }),
+        [USER_RESET_PERIODS.NO_RESET]: '∞'
     }[user.trafficLimitStrategy]
 
     const prettyUsedData = prettifyBytesUtil(usedBytes) || '0 B'

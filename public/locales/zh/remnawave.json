@@ -703,14 +703,16 @@
       "reset-weekly": "每周重置",
       "reset-daily": "每日重置",
       "never-reset": "永不重置",
-      "reset-monthly-by-creation-date": "重置每月(创建日期)"
+      "reset-monthly-by-creation-date": "重置每月(创建日期)",
+      "reset-monthly-by-custom-day": "每月指定日期重置"
     }
   },
   "data-usage": {
     "column": {
       "monthly": "每月",
       "weekly": "周",
-      "daily": "日"
+      "daily": "日",
+      "monthly-custom-day": "每月 · {{day}}日"
     }
   },
   "get-time-ago": {
@@ -1761,7 +1763,11 @@
   "traffic-limits-card": {
     "traffic-and-limits": "流量限制",
     "traffic-limit-description": "0 表示无限制",
-    "traffic-limit": "流量限制"
+    "traffic-limit": "流量限制",
+    "custom-reset-day": "每月重置日期",
+    "custom-reset-day-description": "用户流量将在每月指定日期重置。",
+    "reset-day-option": "{{day}}日",
+    "last-day-fallback-hint": "如果当月没有该日期，将在当月最后一天重置。"
   },
   "node-vitals": {
     "card": {

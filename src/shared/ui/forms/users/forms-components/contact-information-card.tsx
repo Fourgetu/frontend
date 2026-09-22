@@ -1,23 +1,26 @@
 import { NumberInput, Stack, TextInput } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { CreateUserCommand, UpdateUserCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { PiEnvelopeDuotone, PiTelegramLogoDuotone } from 'react-icons/pi'
 import { TbMail } from 'react-icons/tb'
 
+import {
+    CustomCreateUserRequest,
+    CustomUpdateUserRequest
+} from '@shared/api/types/user-traffic-reset.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
-interface IProps<T extends CreateUserCommand.RequestBody | UpdateUserCommand.RequestBody> {
+interface IProps<T extends CustomCreateUserRequest | CustomUpdateUserRequest> {
     cardVariants: Variants
     form: UseFormReturnType<T>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
-export function ContactInformationCard<
-    T extends CreateUserCommand.RequestBody | UpdateUserCommand.RequestBody
->(props: IProps<T>) {
+export function ContactInformationCard<T extends CustomCreateUserRequest | CustomUpdateUserRequest>(
+    props: IProps<T>
+) {
     const { t } = useTranslation()
 
     const { cardVariants, motionWrapper, form } = props

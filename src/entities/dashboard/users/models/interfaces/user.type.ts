@@ -1,3 +1,3 @@
-import { GetUsersCommand } from '@remnawave/backend-contract'
+import { CustomUser } from '@shared/api/types/user-traffic-reset.schema'
 
-export type User = GetUsersCommand.Response['response']['users'][number]
+export type User = CustomUser

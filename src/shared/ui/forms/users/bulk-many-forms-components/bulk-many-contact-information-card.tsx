@@ -1,17 +1,17 @@
 import { NumberInput, Stack, TextInput } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { BulkUpdateUsersCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { PiEnvelopeDuotone, PiTelegramLogoDuotone } from 'react-icons/pi'
 import { TbMail } from 'react-icons/tb'
 
+import { CustomBulkUpdateUsersRequest } from '@shared/api/types/user-traffic-reset.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
 interface IProps {
     cardVariants: Variants
-    form: UseFormReturnType<BulkUpdateUsersCommand.RequestBody>
+    form: UseFormReturnType<CustomBulkUpdateUsersRequest>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 

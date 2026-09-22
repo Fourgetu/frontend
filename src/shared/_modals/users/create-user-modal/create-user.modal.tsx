@@ -1,7 +1,7 @@
 import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import { Button, Group, Modal, Stack } from '@mantine/core'
 import { useForm, schemaResolver } from '@mantine/form'
-import { CreateUserCommand, USERS_STATUS } from '@remnawave/backend-contract'
+import { USERS_STATUS } from '@remnawave/backend-contract'
 import dayjs from 'dayjs'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
@@ -17,6 +17,11 @@ import {
     useGetInternalSquads,
     useGetUserTags
 } from '@shared/api/hooks'
+import {
+    customCreateUserRequestSchema,
+    CustomCreateUserRequest,
+    validateCustomResetDay
+} from '@shared/api/types/user-traffic-reset.schema'
 import { useIsMobile } from '@shared/hooks'
 import {
     AccessSettingsCard,
@@ -25,6 +30,7 @@ import {
     TrafficLimitsCard,
     UserIdentityCreationCard
 } from '@shared/ui/forms/users/forms-components'
+import { normalizeTrafficResetDay } from '@shared/ui/forms/users/model/traffic-reset'
 import { LoaderModalShared } from '@shared/ui/loader-modal'
 import { ModalFooter } from '@shared/ui/modal-footer'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
@@ -81,7 +87,7 @@ export const CreateUserModal = NiceModal.create(() => {
         }
     })
 
-    const form = useForm<CreateUserCommand.RequestBody>({
+    const form = useForm<CustomCreateUserRequest>({
         name: 'create-user-form',
         mode: 'uncontrolled',
         validateInputOnBlur: true,
@@ -95,16 +101,19 @@ export const CreateUserModal = NiceModal.create(() => {
             }
         },
         validate: schemaResolver(
-            CreateUserCommand.RequestBodySchema.omit({
-                expireAt: true,
-                hwidDeviceLimit: true
-            })
+            customCreateUserRequestSchema
+                .omit({
+                    expireAt: true,
+                    hwidDeviceLimit: true
+                })
+                .superRefine(validateCustomResetDay)
         ),
 
         initialValues: {
             status: USERS_STATUS.ACTIVE,
             username: '',
             trafficLimitStrategy: 'NO_RESET',
+            trafficLimitResetDay: null,
             expireAt: dayjs().add(1, 'day').toDate(),
             trafficLimitBytes: 0,
             description: '',
@@ -122,6 +131,10 @@ export const CreateUserModal = NiceModal.create(() => {
                 variables: {
                     username: values.username,
                     trafficLimitStrategy: values.trafficLimitStrategy,
+                    trafficLimitResetDay: normalizeTrafficResetDay(
+                        values.trafficLimitStrategy,
+                        values.trafficLimitResetDay
+                    ),
                     trafficLimitBytes: values.trafficLimitBytes,
                     // @ts-expect-error - TODO: fix ZOD schema
                     expireAt: dayjs(values.expireAt).toISOString(),

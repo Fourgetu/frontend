@@ -20,12 +20,20 @@ import {
     UpdateUserCommand
 } from '@remnawave/backend-contract'
 
+import {
+    customBulkAllUpdateUsersRequestSchema,
+    customBulkUpdateUsersRequestSchema,
+    customCreateUserRequestSchema,
+    customUpdateUserRequestSchema,
+    customUserResponseSchema
+} from '@shared/api/types/user-traffic-reset.schema'
+
 import { createMutationHook } from '../../tsq-helpers'
 
 export const useCreateUser = createMutationHook({
     endpoint: CreateUserCommand.TSQ_url,
-    bodySchema: CreateUserCommand.RequestBodySchema,
-    responseSchema: CreateUserCommand.ResponseSchema,
+    bodySchema: customCreateUserRequestSchema,
+    responseSchema: customUserResponseSchema,
     requestMethod: CreateUserCommand.endpointDetails.REQUEST_METHOD,
 
     rMutationParams: {
@@ -49,8 +57,8 @@ export const useCreateUser = createMutationHook({
 
 export const useUpdateUser = createMutationHook({
     endpoint: UpdateUserCommand.TSQ_url,
-    bodySchema: UpdateUserCommand.RequestBodySchema,
-    responseSchema: UpdateUserCommand.ResponseSchema,
+    bodySchema: customUpdateUserRequestSchema,
+    responseSchema: customUserResponseSchema,
     requestMethod: UpdateUserCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {
@@ -97,7 +105,7 @@ export const useDeleteUser = createMutationHook({
 export const useRevokeUserSubscription = createMutationHook({
     endpoint: RevokeUserSubscriptionCommand.TSQ_url,
     bodySchema: RevokeUserSubscriptionCommand.RequestBodySchema,
-    responseSchema: RevokeUserSubscriptionCommand.ResponseSchema,
+    responseSchema: customUserResponseSchema,
     routeParamsSchema: RevokeUserSubscriptionCommand.RequestParamSchema,
     requestMethod: RevokeUserSubscriptionCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
@@ -121,7 +129,7 @@ export const useRevokeUserSubscription = createMutationHook({
 
 export const useEnableUser = createMutationHook({
     endpoint: EnableUserCommand.TSQ_url,
-    responseSchema: EnableUserCommand.ResponseSchema,
+    responseSchema: customUserResponseSchema,
     routeParamsSchema: EnableUserCommand.RequestParamSchema,
     requestMethod: EnableUserCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
@@ -145,7 +153,7 @@ export const useEnableUser = createMutationHook({
 
 export const useDisableUser = createMutationHook({
     endpoint: DisableUserCommand.TSQ_url,
-    responseSchema: DisableUserCommand.ResponseSchema,
+    responseSchema: customUserResponseSchema,
     routeParamsSchema: DisableUserCommand.RequestParamSchema,
     requestMethod: DisableUserCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
@@ -169,7 +177,7 @@ export const useDisableUser = createMutationHook({
 
 export const useResetUserTraffic = createMutationHook({
     endpoint: ResetUserTrafficCommand.TSQ_url,
-    responseSchema: ResetUserTrafficCommand.ResponseSchema,
+    responseSchema: customUserResponseSchema,
     routeParamsSchema: ResetUserTrafficCommand.RequestParamSchema,
     requestMethod: ResetUserTrafficCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
@@ -199,7 +207,7 @@ export const useBulkDeleteUsersByStatus = createMutationHook({
 
 export const useBulkUpdateUsers = createMutationHook({
     endpoint: BulkUpdateUsersCommand.TSQ_url,
-    bodySchema: BulkUpdateUsersCommand.RequestBodySchema,
+    bodySchema: customBulkUpdateUsersRequestSchema,
     requestMethod: BulkUpdateUsersCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {
@@ -314,7 +322,7 @@ export const useBulkSetActiveInternalSquads = createMutationHook({
 
 export const useBulkAllUpdateUsers = createMutationHook({
     endpoint: BulkAllUpdateUsersCommand.TSQ_url,
-    bodySchema: BulkAllUpdateUsersCommand.RequestBodySchema,
+    bodySchema: customBulkAllUpdateUsersRequestSchema,
     requestMethod: BulkAllUpdateUsersCommand.endpointDetails.REQUEST_METHOD,
     rMutationParams: {
         onSuccess: () => {

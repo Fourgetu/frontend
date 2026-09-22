@@ -1,17 +1,18 @@
 import { Anchor, Checkbox, Code, Input, NumberInput, Stack, Text, Textarea } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { BulkAllUpdateUsersCommand, GetUsersTagsCommand } from '@remnawave/backend-contract'
+import { GetUsersTagsCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { TbDevices2, TbSettings } from 'react-icons/tb'
 
+import { CustomBulkAllUpdateUsersRequest } from '@shared/api/types/user-traffic-reset.schema'
 import { CreateableTagInputShared } from '@shared/ui/createable-tag-input/createable-tag-input'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
 interface IProps {
     cardVariants: Variants
-    form: UseFormReturnType<BulkAllUpdateUsersCommand.RequestBody>
+    form: UseFormReturnType<CustomBulkAllUpdateUsersRequest>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
     tags: GetUsersTagsCommand.Response['response'] | undefined
 }

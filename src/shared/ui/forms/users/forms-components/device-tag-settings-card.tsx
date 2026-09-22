@@ -1,28 +1,28 @@
 import { Anchor, Checkbox, Code, Input, NumberInput, Stack, Text, Textarea } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import {
-    CreateUserCommand,
-    GetUsersTagsCommand,
-    UpdateUserCommand
-} from '@remnawave/backend-contract'
+import { GetUsersTagsCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { TbDevices2, TbSettings } from 'react-icons/tb'
 
+import {
+    CustomCreateUserRequest,
+    CustomUpdateUserRequest
+} from '@shared/api/types/user-traffic-reset.schema'
 import { CreateableTagInputShared } from '@shared/ui/createable-tag-input/createable-tag-input'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
-interface IProps<T extends CreateUserCommand.RequestBody | UpdateUserCommand.RequestBody> {
+interface IProps<T extends CustomCreateUserRequest | CustomUpdateUserRequest> {
     cardVariants: Variants
     form: UseFormReturnType<T>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
     tags: GetUsersTagsCommand.Response['response'] | undefined
 }
 
-export function DeviceTagSettingsCard<
-    T extends CreateUserCommand.RequestBody | UpdateUserCommand.RequestBody
->(props: IProps<T>) {
+export function DeviceTagSettingsCard<T extends CustomCreateUserRequest | CustomUpdateUserRequest>(
+    props: IProps<T>
+) {
     const { t } = useTranslation()
 
     const { cardVariants, motionWrapper, form, tags } = props

@@ -1,19 +1,26 @@
-import { Select, Stack } from '@mantine/core'
+import { Alert, Select, Stack } from '@mantine/core'
 import { UseFormReturnType } from '@mantine/form'
-import { BulkUpdateUsersCommand } from '@remnawave/backend-contract'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { PiClockDuotone } from 'react-icons/pi'
 import { TbChartLine } from 'react-icons/tb'
 
+import {
+    CustomBulkUpdateUsersRequest,
+    MONTH_CUSTOM_DAY
+} from '@shared/api/types/user-traffic-reset.schema'
 import { resetDataStrategy } from '@shared/constants/forms'
 import { TrafficLimitInput } from '@shared/ui/forms/traffic-limit-input'
+import {
+    shouldShowLastDayFallbackHint,
+    trafficResetDayOptions
+} from '@shared/ui/forms/users/model/traffic-reset'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
 interface IProps {
     cardVariants: Variants
-    form: UseFormReturnType<BulkUpdateUsersCommand.RequestBody>
+    form: UseFormReturnType<CustomBulkUpdateUsersRequest>
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
@@ -23,6 +30,9 @@ export const BulkTrafficLimitsCard = (props: IProps) => {
     const { cardVariants, motionWrapper, form } = props
 
     const MotionWrapper = motionWrapper
+    const strategy = form.values.fields.trafficLimitStrategy
+    const resetDay = form.values.fields.trafficLimitResetDay
+    const strategyInputProps = form.getInputProps('fields.trafficLimitStrategy')
 
     return (
         <MotionWrapper variants={cardVariants}>
@@ -64,11 +74,43 @@ export const BulkTrafficLimitsCard = (props: IProps) => {
                             label={t('create-user-modal.widget.traffic-reset-strategy')}
                             leftSection={<PiClockDuotone size="16px" />}
                             placeholder={t('create-user-modal.widget.pick-value')}
-                            {...form.getInputProps('fields.trafficLimitStrategy')}
+                            {...strategyInputProps}
+                            onChange={(value) => {
+                                strategyInputProps.onChange(value)
+                                if (value !== MONTH_CUSTOM_DAY) {
+                                    form.setFieldValue('fields.trafficLimitResetDay', null)
+                                }
+                            }}
                             styles={{
                                 label: { fontWeight: 500 }
                             }}
                         />
+                        {strategy === MONTH_CUSTOM_DAY && (
+                            <Select
+                                allowDeselect={false}
+                                data={trafficResetDayOptions.map((day) => ({
+                                    value: String(day),
+                                    label: t('traffic-limits-card.reset-day-option', { day })
+                                }))}
+                                description={t('traffic-limits-card.custom-reset-day-description')}
+                                key={form.key('fields.trafficLimitResetDay')}
+                                label={t('traffic-limits-card.custom-reset-day')}
+                                onChange={(value) =>
+                                    form.setFieldValue(
+                                        'fields.trafficLimitResetDay',
+                                        value === null ? null : Number(value)
+                                    )
+                                }
+                                required
+                                value={resetDay == null ? null : String(resetDay)}
+                            />
+                        )}
+                        {strategy === MONTH_CUSTOM_DAY &&
+                            shouldShowLastDayFallbackHint(resetDay) && (
+                                <Alert color="blue" variant="light">
+                                    {t('traffic-limits-card.last-day-fallback-hint')}
+                                </Alert>
+                            )}
                     </Stack>
                 </SectionCard.Section>
             </SectionCard.Root>

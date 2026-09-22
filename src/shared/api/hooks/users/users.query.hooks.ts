@@ -11,6 +11,10 @@ import {
 } from '@remnawave/backend-contract'
 import { keepPreviousData } from '@tanstack/react-query'
 
+import {
+    customUserResponseSchema,
+    customUsersResponseSchema
+} from '@shared/api/types/user-traffic-reset.schema'
 import { sToMs } from '@shared/utils/time-utils'
 
 import { createGetQueryHook, errorHandler } from '../../tsq-helpers'
@@ -46,7 +50,7 @@ export const usersQueryKeys = createQueryKeys('users', {
 
 export const useGetUserById = createGetQueryHook({
     endpoint: GetUserByIdCommand.TSQ_url,
-    responseSchema: GetUserByIdCommand.ResponseSchema,
+    responseSchema: customUserResponseSchema,
     routeParamsSchema: GetUserByIdCommand.RequestParamSchema,
     getQueryKey: ({ route }) => usersQueryKeys.getUserById(route!).queryKey,
     rQueryParams: {
@@ -58,7 +62,7 @@ export const useGetUserById = createGetQueryHook({
 
 export const useGetUsers = createGetQueryHook({
     endpoint: GetUsersCommand.TSQ_url,
-    responseSchema: GetUsersCommand.ResponseSchema,
+    responseSchema: customUsersResponseSchema,
     requestQuerySchema: GetUsersCommand.RequestQuerySchema,
     getQueryKey: ({ query }) => usersQueryKeys.getAllUsers(query!).queryKey,
     rQueryParams: {

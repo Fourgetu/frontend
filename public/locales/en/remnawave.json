@@ -704,14 +704,16 @@
       "reset-weekly": "Reset weekly",
       "reset-daily": "Reset daily",
       "never-reset": "Never reset",
-      "reset-monthly-by-creation-date": "Reset monthly (by creation date)"
+      "reset-monthly-by-creation-date": "Reset monthly (by creation date)",
+      "reset-monthly-by-custom-day": "Reset monthly on a specified day"
     }
   },
   "data-usage": {
     "column": {
       "monthly": "Monthly",
       "weekly": "Weekly",
-      "daily": "Daily"
+      "daily": "Daily",
+      "monthly-custom-day": "Monthly · day {{day}}"
     }
   },
   "get-time-ago": {
@@ -1762,7 +1764,11 @@
   "traffic-limits-card": {
     "traffic-and-limits": "Traffic & limits",
     "traffic-limit-description": "0 means unlimited",
-    "traffic-limit": "Traffic limit"
+    "traffic-limit": "Traffic limit",
+    "custom-reset-day": "Monthly reset day",
+    "custom-reset-day-description": "The user's traffic will reset on the specified day each month.",
+    "reset-day-option": "Day {{day}}",
+    "last-day-fallback-hint": "If the selected day does not exist in a month, traffic will reset on that month's last day."
   },
   "node-vitals": {
     "card": {

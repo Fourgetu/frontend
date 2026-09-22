@@ -1,7 +1,6 @@
 import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import { Button, Group, Modal, Stack } from '@mantine/core'
 import { useForm, schemaResolver } from '@mantine/form'
-import { BulkAllUpdateUsersCommand } from '@remnawave/backend-contract'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { PiFloppyDiskDuotone } from 'react-icons/pi'
@@ -15,6 +14,11 @@ import {
     useGetUserTags
 } from '@shared/api/hooks'
 import { queryClient } from '@shared/api/query-client'
+import {
+    customBulkAllUpdateUsersRequestSchema,
+    CustomBulkAllUpdateUsersRequest,
+    validateCustomResetDay
+} from '@shared/api/types/user-traffic-reset.schema'
 import { useIsMobile } from '@shared/hooks/use-is-mobile'
 import { BulkFormsUsersShared } from '@shared/ui/forms/users/bulk-forms-components'
 import { ModalFooter } from '@shared/ui/modal-footer'
@@ -58,13 +62,14 @@ export const BulkAllUsersUpdateModal = NiceModal.create(() => {
     const { data: externalSquads } = useGetExternalSquads()
     const { data: tags } = useGetUserTags()
 
-    const form = useForm<BulkAllUpdateUsersCommand.RequestBody>({
+    const form = useForm<CustomBulkAllUpdateUsersRequest>({
         mode: 'uncontrolled',
         name: 'bulk-all-user-actions-form',
         initialValues: {
             status: undefined,
             trafficLimitBytes: undefined,
             trafficLimitStrategy: undefined,
+            trafficLimitResetDay: undefined,
             expireAt: undefined,
             description: undefined,
             telegramId: undefined,
@@ -72,11 +77,13 @@ export const BulkAllUsersUpdateModal = NiceModal.create(() => {
             hwidDeviceLimit: undefined
         },
         validate: schemaResolver(
-            BulkAllUpdateUsersCommand.RequestBodySchema.omit({
-                expireAt: true,
-                telegramId: true,
-                email: true
-            })
+            customBulkAllUpdateUsersRequestSchema
+                .omit({
+                    expireAt: true,
+                    telegramId: true,
+                    email: true
+                })
+                .superRefine(validateCustomResetDay)
         )
     })
 

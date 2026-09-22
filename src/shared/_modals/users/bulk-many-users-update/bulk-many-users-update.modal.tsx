@@ -1,7 +1,6 @@
 import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import { Button, Group, Modal, Stack } from '@mantine/core'
 import { useForm, schemaResolver } from '@mantine/form'
-import { BulkUpdateUsersCommand } from '@remnawave/backend-contract'
 import dayjs from 'dayjs'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +10,11 @@ import { z } from 'zod'
 
 import { useNiceMantineModal } from '@shared/_modals/use-nice-modal'
 import { useBulkUpdateUsers, useGetExternalSquads, useGetUserTags } from '@shared/api/hooks'
+import {
+    customBulkUpdateUsersRequestSchema,
+    CustomBulkUpdateUsersRequest,
+    validateCustomResetDay
+} from '@shared/api/types/user-traffic-reset.schema'
 import { useIsMobile } from '@shared/hooks'
 import { BulkManyFormsUsersShared } from '@shared/ui/forms/users/bulk-many-forms-components'
 import { ModalFooter } from '@shared/ui/modal-footer'
@@ -40,7 +44,7 @@ const cardVariants = {
     }
 }
 
-const originalFieldsSchema = BulkUpdateUsersCommand.RequestBodySchema.shape.fields
+const originalFieldsSchema = customBulkUpdateUsersRequestSchema.shape.fields
 
 const fieldsWithoutExpireAt = originalFieldsSchema.omit({
     expireAt: true,
@@ -49,7 +53,7 @@ const fieldsWithoutExpireAt = originalFieldsSchema.omit({
 })
 
 const customSchema = z.object({
-    fields: fieldsWithoutExpireAt
+    fields: fieldsWithoutExpireAt.superRefine(validateCustomResetDay)
 })
 
 interface IProps {
@@ -73,7 +77,7 @@ export const BulkManyUsersUpdateModal = NiceModal.create((props: IProps) => {
 
     const actions = useUsersTableSelectionStoreActions()
 
-    const form = useForm<BulkUpdateUsersCommand.RequestBody>({
+    const form = useForm<CustomBulkUpdateUsersRequest>({
         mode: 'uncontrolled',
         name: 'bulk-user-actions-form',
         initialValues: {
@@ -82,6 +86,7 @@ export const BulkManyUsersUpdateModal = NiceModal.create((props: IProps) => {
                 status: undefined,
                 trafficLimitBytes: undefined,
                 trafficLimitStrategy: undefined,
+                trafficLimitResetDay: undefined,
                 expireAt: undefined,
                 description: undefined,
                 telegramId: undefined,

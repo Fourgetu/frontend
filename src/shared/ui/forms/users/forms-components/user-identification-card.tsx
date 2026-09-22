@@ -13,7 +13,7 @@ import {
     Tooltip
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
-import { GetUserByIdCommand, USERS_STATUS } from '@remnawave/backend-contract'
+import { USERS_STATUS } from '@remnawave/backend-contract'
 import { UserStatusBadge } from '@widgets/dashboard/users/user-status-badge'
 import dayjs from 'dayjs'
 import { githubDarkTheme, JsonEditor } from 'json-edit-react'
@@ -38,6 +38,7 @@ import {
 
 import { showModal } from '@shared/_modals/show-modal'
 import { useGetUserMetadata } from '@shared/api/hooks'
+import { CustomUser } from '@shared/api/types/user-traffic-reset.schema'
 import { CopyableCodeBlock } from '@shared/ui/copyable-code-block'
 import { CopyableFieldShared } from '@shared/ui/copyable-field/copyable-field'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
@@ -50,7 +51,7 @@ interface IProps {
     cardVariants: Variants
     lastConnectedNode?: null | { countryCode: string; name: string; uuid: string }
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
-    user: GetUserByIdCommand.Response['response']
+    user: CustomUser
 }
 
 const statusIconColorMap = {

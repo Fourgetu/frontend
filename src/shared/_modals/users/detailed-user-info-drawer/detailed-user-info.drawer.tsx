@@ -13,6 +13,7 @@ import {
 
 import { useNiceMantineModal } from '@shared/_modals/use-nice-modal'
 import { useGetUserById } from '@shared/api/hooks'
+import { resetDataStrategy } from '@shared/constants/forms'
 import { CopyableDataListItem } from '@shared/ui/copyable-field/copyable-data-list-item'
 import { LoaderModalShared } from '@shared/ui/loader-modal'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
@@ -40,6 +41,10 @@ export const DetailedUserInfoDrawer = NiceModal.create((props: IProps) => {
             userId: userId
         }
     })
+
+    const trafficResetStrategy = user
+        ? resetDataStrategy(t).find((option) => option.value === user.trafficLimitStrategy)?.label
+        : undefined
 
     return (
         <Drawer
@@ -144,7 +149,16 @@ export const DetailedUserInfoDrawer = NiceModal.create((props: IProps) => {
                                     label={t(
                                         'detailed-user-info-drawer.widget.traffic-limit-strategy'
                                     )}
-                                    value={user.trafficLimitStrategy}
+                                    value={
+                                        user.trafficLimitResetDay === null
+                                            ? trafficResetStrategy
+                                            : `${trafficResetStrategy} · ${t(
+                                                  'traffic-limits-card.reset-day-option',
+                                                  {
+                                                      day: user.trafficLimitResetDay
+                                                  }
+                                              )}`
+                                    }
                                 />
                                 <CopyableDataListItem
                                     label={t('detailed-user-info-drawer.widget.last-traffic-reset')}

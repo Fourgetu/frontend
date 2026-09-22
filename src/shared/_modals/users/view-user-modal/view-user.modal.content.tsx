@@ -4,7 +4,6 @@ import { RevokeSubscriptionUserFeature } from '@features/ui/dashboard/users/revo
 import { ToggleUserStatusButtonFeature } from '@features/ui/dashboard/users/toggle-user-status-button'
 import { Button, Group, Menu, px, Stack } from '@mantine/core'
 import { useForm, schemaResolver } from '@mantine/form'
-import { UpdateUserCommand } from '@remnawave/backend-contract'
 import dayjs from 'dayjs'
 import { motion } from 'motion/react'
 import { useEffect } from 'react'
@@ -23,6 +22,11 @@ import {
     usersQueryKeys,
     useUpdateUser
 } from '@shared/api/hooks'
+import {
+    customUpdateUserRequestSchema,
+    CustomUpdateUserRequest,
+    validateCustomResetDay
+} from '@shared/api/types/user-traffic-reset.schema'
 import { useIsMobile } from '@shared/hooks'
 import {
     AccessSettingsCard,
@@ -31,6 +35,7 @@ import {
     TrafficLimitsCard,
     UserIdentificationCard
 } from '@shared/ui/forms/users/forms-components'
+import { normalizeTrafficResetDay } from '@shared/ui/forms/users/model/traffic-reset'
 import { LoaderModalShared } from '@shared/ui/loader-modal'
 import { ModalFooter } from '@shared/ui/modal-footer'
 import { handleFormErrors } from '@shared/utils/misc'
@@ -72,7 +77,7 @@ export const ViewUserModalContent = (props: IProps) => {
     const { data: nodes } = useGetNodes()
     const { data: tags } = useGetUserTags()
 
-    const form = useForm<UpdateUserCommand.RequestBody>({
+    const form = useForm<CustomUpdateUserRequest>({
         name: 'edit-user-form',
         mode: 'uncontrolled',
         onValuesChange: (values) => {
@@ -84,10 +89,13 @@ export const ViewUserModalContent = (props: IProps) => {
             }
         },
         validate: schemaResolver(
-            z.object(UpdateUserCommand.RequestBodySchema.shape).omit({
-                expireAt: true,
-                hwidDeviceLimit: true
-            })
+            z
+                .object(customUpdateUserRequestSchema.shape)
+                .omit({
+                    expireAt: true,
+                    hwidDeviceLimit: true
+                })
+                .superRefine(validateCustomResetDay)
         )
     })
 
@@ -130,6 +138,7 @@ export const ViewUserModalContent = (props: IProps) => {
                 id: user.id,
                 trafficLimitBytes: user.trafficLimitBytes,
                 trafficLimitStrategy: user.trafficLimitStrategy,
+                trafficLimitResetDay: user.trafficLimitResetDay,
                 expireAt: user.expireAt,
                 activeInternalSquads,
                 description: user.description ?? '',
@@ -151,6 +160,13 @@ export const ViewUserModalContent = (props: IProps) => {
                 trafficLimitStrategy: touchedFields.trafficLimitStrategy
                     ? values.trafficLimitStrategy
                     : undefined,
+                trafficLimitResetDay:
+                    touchedFields.trafficLimitStrategy || touchedFields.trafficLimitResetDay
+                        ? normalizeTrafficResetDay(
+                              values.trafficLimitStrategy,
+                              values.trafficLimitResetDay
+                          )
+                        : undefined,
                 trafficLimitBytes: touchedFields.trafficLimitBytes
                     ? values.trafficLimitBytes
                     : undefined,

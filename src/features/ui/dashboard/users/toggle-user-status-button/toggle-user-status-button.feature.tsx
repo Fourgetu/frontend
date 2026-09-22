@@ -1,13 +1,14 @@
 import { Loader, Menu } from '@mantine/core'
-import { GetUserByIdCommand, USERS_STATUS } from '@remnawave/backend-contract'
+import { USERS_STATUS } from '@remnawave/backend-contract'
 import { useTranslation } from 'react-i18next'
 import { PiCellSignalFullDuotone, PiCellSignalSlashDuotone, PiTrashDuotone } from 'react-icons/pi'
 
 import { queryClient } from '@shared/api'
 import { useDisableUser, useEnableUser, usersQueryKeys } from '@shared/api/hooks'
+import { CustomUser } from '@shared/api/types/user-traffic-reset.schema'
 
 interface IProps {
-    user: GetUserByIdCommand.Response['response']
+    user: CustomUser
 }
 
 export function ToggleUserStatusButtonFeature(props: IProps) {

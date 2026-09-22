@@ -2,12 +2,7 @@ import { Select, Stack } from '@mantine/core'
 import { DateTimePicker, getTimeRange } from '@mantine/dates'
 import { UseFormReturnType } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
-import {
-    CreateUserCommand,
-    GetExternalSquadsCommand,
-    GetInternalSquadsCommand,
-    UpdateUserCommand
-} from '@remnawave/backend-contract'
+import { GetExternalSquadsCommand, GetInternalSquadsCommand } from '@remnawave/backend-contract'
 import { InternalSquadsListWidget } from '@widgets/dashboard/users/internal-squads-list'
 import dayjs from 'dayjs'
 import { ForwardRefComponent, HTMLMotionProps, Variants } from 'motion/react'
@@ -16,10 +11,14 @@ import { useTranslation } from 'react-i18next'
 import { PiCalendarDuotone } from 'react-icons/pi'
 import { TbShield, TbWebhook } from 'react-icons/tb'
 
+import {
+    CustomCreateUserRequest,
+    CustomUpdateUserRequest
+} from '@shared/api/types/user-traffic-reset.schema'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 import { SectionCard } from '@shared/ui/section-card'
 
-interface IProps<T extends CreateUserCommand.RequestBody | UpdateUserCommand.RequestBody> {
+interface IProps<T extends CustomCreateUserRequest | CustomUpdateUserRequest> {
     cardVariants: Variants
     externalSquads: GetExternalSquadsCommand.Response['response'] | undefined
     form: UseFormReturnType<T>
@@ -27,9 +26,7 @@ interface IProps<T extends CreateUserCommand.RequestBody | UpdateUserCommand.Req
     motionWrapper: ForwardRefComponent<HTMLDivElement, HTMLMotionProps<'div'>>
 }
 
-export const AccessSettingsCard = <
-    T extends CreateUserCommand.RequestBody | UpdateUserCommand.RequestBody
->(
+export const AccessSettingsCard = <T extends CustomCreateUserRequest | CustomUpdateUserRequest>(
     props: IProps<T>
 ) => {
     const { t, i18n } = useTranslation()
