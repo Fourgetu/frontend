@@ -51,6 +51,14 @@ export const customCreateUserRequestSchema = CreateUserCommand.RequestBodySchema
     trafficLimitResetDay: userResetDaySchema.optional()
 }).superRefine(validateCustomResetDay)
 
+export const customCreateUserFormSchema = z
+    .object(customCreateUserRequestSchema.shape)
+    .omit({
+        expireAt: true,
+        hwidDeviceLimit: true
+    })
+    .superRefine(validateCustomResetDay)
+
 export const customUpdateUserRequestSchema = z
     .object({
         ...UpdateUserCommand.RequestBodySchema.shape,

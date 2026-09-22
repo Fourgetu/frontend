@@ -18,9 +18,8 @@ import {
     useGetUserTags
 } from '@shared/api/hooks'
 import {
-    customCreateUserRequestSchema,
-    CustomCreateUserRequest,
-    validateCustomResetDay
+    customCreateUserFormSchema,
+    CustomCreateUserRequest
 } from '@shared/api/types/user-traffic-reset.schema'
 import { useIsMobile } from '@shared/hooks'
 import {
@@ -100,14 +99,7 @@ export const CreateUserModal = NiceModal.create(() => {
                 form.setFieldValue('email', null)
             }
         },
-        validate: schemaResolver(
-            customCreateUserRequestSchema
-                .omit({
-                    expireAt: true,
-                    hwidDeviceLimit: true
-                })
-                .superRefine(validateCustomResetDay)
-        ),
+        validate: schemaResolver(customCreateUserFormSchema),
 
         initialValues: {
             status: USERS_STATUS.ACTIVE,

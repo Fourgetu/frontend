@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    customCreateUserFormSchema,
     customCreateUserRequestSchema,
     customUpdateUserRequestSchema,
     MONTH_CUSTOM_DAY,
@@ -33,6 +34,18 @@ test('create payload requires and preserves a custom reset day', () => {
         customCreateUserRequestSchema.safeParse({
             username: 'custom-reset-user',
             expireAt: '2027-09-22T00:00:00.000Z',
+            trafficLimitStrategy: MONTH_CUSTOM_DAY
+        }).success,
+        false
+    )
+})
+
+test('create-user form schema can omit non-form fields without inheriting refinements', () => {
+    assert.doesNotThrow(() => customCreateUserFormSchema.parse({ username: 'plain-user' }))
+
+    assert.equal(
+        customCreateUserFormSchema.safeParse({
+            username: 'custom-reset-user',
             trafficLimitStrategy: MONTH_CUSTOM_DAY
         }).success,
         false
