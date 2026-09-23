@@ -57,6 +57,7 @@ import {
     validateInboundCollection,
     type InboundEditorDraft
 } from './index.ts'
+import { MixedShareLinks } from './mixed-share-links.tsx'
 
 type InboundManagerProps = {
     coreType: VisualCoreType
@@ -1439,6 +1440,20 @@ export function InboundVisualManager({
                                 </Text>
                             </Tabs.Panel>
                         </Tabs>
+                        {editorDraft.protocol === 'mixed' && (
+                            <>
+                                <Divider />
+                                <MixedShareLinks
+                                    key={`${editorInbound.index}:${editorInbound.tag}:${editorInbound.port}`}
+                                    draft={editorDraft}
+                                    saved={getInboundEditorDraft(
+                                        editorInbound.raw,
+                                        coreType,
+                                        REALITY_MIN_CLIENT_VERSION_COMPAT
+                                    )}
+                                />
+                            </>
+                        )}
                         {editorReferences.length > 0 && (
                             <Alert
                                 color="yellow"
