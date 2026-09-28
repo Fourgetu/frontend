@@ -34,7 +34,7 @@ export const getOutboundEndpointPaths = (
     const settings = isObject(outbound.settings) ? outbound.settings : undefined
     const vnext = Array.isArray(settings?.vnext) ? settings.vnext[0] : undefined
     const servers = Array.isArray(settings?.servers) ? settings.servers[0] : undefined
-    const endpoint = firstObject(vnext, servers, settings?.server)
+    const endpoint = firstObject(vnext, servers, settings?.server, settings)
     if (!endpoint) return {}
     const prefix = vnext
         ? ['settings', 'vnext', 0]

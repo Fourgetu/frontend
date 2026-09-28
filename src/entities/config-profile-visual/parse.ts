@@ -239,7 +239,8 @@ const parseXrayOutbound = (value: JsonObject, index: number): VisualOutbound => 
     const endpoint = firstObject(
         Array.isArray(settings?.vnext) ? settings.vnext[0] : undefined,
         Array.isArray(settings?.servers) ? settings.servers[0] : undefined,
-        settings?.server
+        settings?.server,
+        settings
     )
     const streamSettings = isObject(value.streamSettings) ? value.streamSettings : undefined
     const snippetManaged = typeof value.snippet === 'string' && value.snippet.length > 0

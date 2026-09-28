@@ -58,8 +58,12 @@ export const getOutboundEditorDraft = (
         }
     }
     const settings = object(outbound.settings)
-    const endpoint = first(settings.vnext ?? settings.servers)
-    const user = first(endpoint.users)
+    const flatVless =
+        outbound.protocol === 'vless' &&
+        !Array.isArray(settings.vnext) &&
+        ('address' in settings || 'port' in settings || 'id' in settings)
+    const endpoint = flatVless ? settings : first(settings.vnext ?? settings.servers)
+    const user = flatVless ? settings : first(endpoint.users)
     const stream = object(outbound.streamSettings)
     const tls = object(stream.tlsSettings)
     const reality = object(stream.realitySettings)
@@ -157,29 +161,44 @@ export const buildOutboundEditorOperations = (
     } else {
         next.sendThrough = draft.sendThrough
         const settings = object(next.settings)
-        const endpointKey = Array.isArray(settings.vnext) ? 'vnext' : 'servers'
-        const endpoints = Array.isArray(settings[endpointKey])
-            ? clone(settings[endpointKey] as unknown[])
-            : []
-        const endpoint = object(endpoints[0])
-        endpoint.address = draft.server.trim()
-        endpoint.port = numberPort(draft.port)
-        if (draft.protocol === 'vless' || draft.protocol === 'vmess') {
-            const users = Array.isArray(endpoint.users) ? clone(endpoint.users) : []
-            const user = object(users[0])
-            user.id = draft.credential.trim()
-            if (draft.flow || 'flow' in user) user.flow = draft.flow
-            users[0] = user
-            endpoint.users = users
+        const flatVless =
+            draft.protocol === 'vless' &&
+            !Array.isArray(settings.vnext) &&
+            ('address' in settings || 'port' in settings || 'id' in settings)
+        if (flatVless) {
+            next.settings = {
+                ...settings,
+                address: draft.server.trim(),
+                port: numberPort(draft.port),
+                id: draft.credential.trim(),
+                ...(draft.flow || 'flow' in settings ? { flow: draft.flow } : {}),
+                domainStrategy: draft.targetStrategy
+            }
         } else {
-            if ('password' in endpoint || draft.password) endpoint.password = draft.password
-            if ('method' in endpoint || draft.method) endpoint.method = draft.method
-        }
-        endpoints[0] = endpoint
-        next.settings = {
-            ...settings,
-            [endpointKey]: endpoints,
-            domainStrategy: draft.targetStrategy
+            const endpointKey = Array.isArray(settings.vnext) ? 'vnext' : 'servers'
+            const endpoints = Array.isArray(settings[endpointKey])
+                ? clone(settings[endpointKey] as unknown[])
+                : []
+            const endpoint = object(endpoints[0])
+            endpoint.address = draft.server.trim()
+            endpoint.port = numberPort(draft.port)
+            if (draft.protocol === 'vless' || draft.protocol === 'vmess') {
+                const users = Array.isArray(endpoint.users) ? clone(endpoint.users) : []
+                const user = object(users[0])
+                user.id = draft.credential.trim()
+                if (draft.flow || 'flow' in user) user.flow = draft.flow
+                users[0] = user
+                endpoint.users = users
+            } else {
+                if ('password' in endpoint || draft.password) endpoint.password = draft.password
+                if ('method' in endpoint || draft.method) endpoint.method = draft.method
+            }
+            endpoints[0] = endpoint
+            next.settings = {
+                ...settings,
+                [endpointKey]: endpoints,
+                domainStrategy: draft.targetStrategy
+            }
         }
         const stream = object(next.streamSettings)
         const nextStream: JsonObject = {

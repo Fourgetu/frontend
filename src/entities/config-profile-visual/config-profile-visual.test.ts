@@ -16,6 +16,7 @@ import {
     getInboundPortConflict,
     validateInboundCollection
 } from './inbound.ts'
+import { buildOutboundEditorOperations, getOutboundEditorDraft } from './outbound-editor.ts'
 import {
     cloneOutbound,
     createOutboundTemplate,
@@ -298,6 +299,66 @@ test('parses Xray outbound details and targeted server edit preserves unknown fi
             keep: true
         }
     )
+})
+
+test('flat Xray VLESS outbound fills basic fields and edits without changing its schema', () => {
+    const outbound: JsonObject = {
+        tag: 'flat-vless',
+        protocol: 'vless',
+        settings: {
+            address: 'old.example.com',
+            port: 52115,
+            id: 'example-uuid',
+            flow: 'xtls-rprx-vision',
+            encryption: 'none',
+            testseed: [900, 500, 900, 256]
+        },
+        streamSettings: {
+            network: 'tcp',
+            security: 'reality',
+            realitySettings: {
+                serverName: 'www.example.com',
+                fingerprint: 'chrome',
+                shortId: 'abcd',
+                publicKey: 'example-public-key'
+            }
+        }
+    }
+    const document = parseConfigProfile({ outbounds: [outbound] }, 'xray')
+    assert.equal(document.outboundDetails[0].server, 'old.example.com')
+    assert.equal(document.outboundDetails[0].port, 52115)
+    assert.deepEqual(getOutboundEndpointPaths(outbound, 'xray'), {
+        serverPath: ['settings', 'address'],
+        portPath: ['settings', 'port']
+    })
+    const draft = getOutboundEditorDraft(outbound, 'xray')
+    assert.equal(draft.credential, 'example-uuid')
+    assert.equal(draft.flow, 'xtls-rprx-vision')
+    assert.equal(draft.sni, 'www.example.com')
+    assert.equal(draft.fingerprint, 'chrome')
+    assert.deepEqual(buildOutboundEditorOperations(outbound, 0, 'xray', draft), [])
+
+    const edited = applyVisualPatch(
+        { outbounds: [outbound] },
+        {
+            operations: buildOutboundEditorOperations(outbound, 0, 'xray', {
+                ...draft,
+                server: 'new.example.com',
+                port: '443',
+                credential: 'new-uuid',
+                flow: ''
+            })
+        }
+    )
+    const settings = ((edited.outbounds as JsonObject[])[0].settings ?? {}) as JsonObject
+    assert.equal(settings.address, 'new.example.com')
+    assert.equal(settings.port, 443)
+    assert.equal(settings.id, 'new-uuid')
+    assert.equal(settings.flow, '')
+    assert.equal(settings.encryption, 'none')
+    assert.deepEqual(settings.testseed, [900, 500, 900, 256])
+    assert.equal(settings.vnext, undefined)
+    assert.deepEqual((edited.outbounds as JsonObject[])[0].streamSettings, outbound.streamSettings)
 })
 
 test('parses sing-box direct and proxy outbounds without Xray fields', () => {
