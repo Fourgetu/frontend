@@ -1,0 +1,45 @@
+name: Custom Release - Frontend
+
+on:
+  push:
+    tags:
+      - 'custom-*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.20.0'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Test and build
+        run: |
+          npm test
+          npm run typecheck
+          npm run start:build
+      - name: Package frontend
+        run: |
+          zip -qr remnawave-frontend.zip dist
+          sha256sum remnawave-frontend.zip > SHA256SUMS
+      - name: Publish frontend asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            remnawave-frontend.zip
+            SHA256SUMS
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          body: |
+            Custom frontend release, packaged for the matching Backend image.
+            Source: `${{ github.sha }}`.
+            Locked dependency installation, tests, TypeScript and production build passed on Node.js 24.20.0.
