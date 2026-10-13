@@ -11,6 +11,7 @@ import {
 } from '@remnawave/backend-contract'
 
 import { createMutationHook } from '../../tsq-helpers'
+import { CloneHostCommand } from '../../types/clone-host.command'
 
 export const useCreateHost = createMutationHook({
     endpoint: CreateHostCommand.TSQ_url,
@@ -21,6 +22,23 @@ export const useCreateHost = createMutationHook({
         onError: (error) => {
             notifications.show({
                 title: `Create Host`,
+                message:
+                    error instanceof Error ? error.message : `Request failed with unknown error.`,
+                color: 'red'
+            })
+        }
+    }
+})
+
+export const useCloneHost = createMutationHook({
+    endpoint: CloneHostCommand.TSQ_url,
+    bodySchema: CloneHostCommand.RequestBodySchema,
+    responseSchema: CloneHostCommand.ResponseSchema,
+    requestMethod: CloneHostCommand.endpointDetails.REQUEST_METHOD,
+    rMutationParams: {
+        onError: (error) => {
+            notifications.show({
+                title: `Clone Host`,
                 message:
                     error instanceof Error ? error.message : `Request failed with unknown error.`,
                 color: 'red'

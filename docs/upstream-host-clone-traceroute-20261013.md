@@ -1,0 +1,11 @@
+# Host clone and traceroute adaptation — 2026-10-13
+
+Selected upstream frontend commits: `87d4d080` (Host clone), `adc4afbb` (traceroute), `66373c80` (provider link), `ac59da34` (YAML print width), `bca69989` (disabled-user button colour), and `54bf71cc` (eight Chinese translations). Dependency manifests retain all dependency versions; only the test script changes.
+
+Single and bulk Host cloning now call the companion backend's transactional clone endpoint. A local command definition supplies the new endpoint while reusing the installed contract's Host response schema. Its URL normalizes the older contract's trailing slash. Bulk calls run sequentially and continue after individual errors; the mutation hook reports failures, then the list refreshes. A failed individual clone keeps the editor open. New clones are disabled and retain Host fields and node/internal-squad links; separately owned user routes are not duplicated. Backend and frontend must be delivered together.
+
+The geocheck result can display connectivity targets, AS hops and latency/loss metrics. Direct and nested connectivity payloads are supported. Runtime validation rejects missing or malformed rendered fields, keeping older reports usable through the image/JSON view. Refreshing while traceroute is selected falls back when the replacement report lacks valid trace data. The raw JSON is preserved. Technical traceroute labels retain upstream English wording; the eight selected Chinese translations extend the fork's existing locale.
+
+Provider links, YAML editor print width and the disabled-user button colour follow the selected upstream fixes. Custom dual-core features and package versions are retained.
+
+Validation: 219 frontend tests, TypeScript, Vite production build and changed-file lint passed. New tests cover report shapes, malformed data, raw JSON preservation, AS grouping/timeouts and clone URL/UUID validation. A local Playwright preview using the actual result widget passed desktop and 390×844 checks with no horizontal page overflow. Old and incomplete reports fell back to JSON after selecting traceroute; no render errors appeared (the isolated fixture's favicon returned 404). This does not constitute an authenticated HTTP or live VPS/Node smoke test.
