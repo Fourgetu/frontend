@@ -27,9 +27,8 @@ export const NodeConfigProfilesCard = <T extends ConcurrentNodeFormValues>(props
     const { data: configProfiles, isLoading: isConfigProfilesLoading } = useGetConfigProfiles()
 
     const saveInbounds = (bindings: ConcurrentProfileBindings) => {
-        form.setValues(bindings as Partial<T>)
-        form.setTouched({ configProfile: true, singBoxConfigProfile: true } as never)
-        form.setDirty({ configProfile: true, singBoxConfigProfile: true } as never)
+        form.setFieldValue('configProfile', bindings.configProfile as never)
+        form.setFieldValue('singBoxConfigProfile', bindings.singBoxConfigProfile as never)
     }
 
     return (

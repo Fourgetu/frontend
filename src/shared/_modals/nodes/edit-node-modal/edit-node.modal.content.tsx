@@ -1,3 +1,4 @@
+import { getChangedNodeValues } from '@features/dashboard/nodes/config-profile-selection/model/changed-node-values'
 import { createConcurrentProfileBindingsFromNode } from '@features/dashboard/nodes/config-profile-selection/model/concurrent-profile-selection'
 import { useForm, schemaResolver } from '@mantine/form'
 import { NodeDetailsCardWidget } from '@widgets/dashboard/nodes/node-details-card'
@@ -119,12 +120,7 @@ export const EditNodeByUuidModalContent = (props: IProps) => {
         }
 
         updateNode({
-            variables: {
-                ...values,
-                name: values.name?.trim(),
-                address: values.address?.trim(),
-                trafficLimitBytes: values.trafficLimitBytes
-            }
+            variables: getChangedNodeValues(fetchedNode.uuid, values, form.isDirty)
         })
     })
 

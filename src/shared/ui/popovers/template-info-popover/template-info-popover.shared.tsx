@@ -1,6 +1,6 @@
 import { ActionIcon, SimpleGrid, Stack, Text } from '@mantine/core'
 import { modals } from '@mantine/modals'
-import { TEMPLATE_KEYS, TemplateKeys } from '@remnawave/backend-contract'
+import { TEMPLATE_KEYS as CONTRACT_TEMPLATE_KEYS } from '@remnawave/backend-contract'
 import { TSubscriptionPageTemplateKey } from '@remnawave/subscription-page-types'
 import { useTranslation } from 'react-i18next'
 import { TbInfoSquare } from 'react-icons/tb'
@@ -10,8 +10,18 @@ import { CopyableCodeBlock } from '@shared/ui/copyable-code-block'
 import { BaseOverlayHeader } from '@shared/ui/overlays/base-overlay-header'
 
 interface IProps {
-    templateKeys?: readonly TemplateKeys[] | readonly TSubscriptionPageTemplateKey[]
+    templateKeys?:
+        | readonly (typeof TEMPLATE_KEYS)[number][]
+        | readonly TSubscriptionPageTemplateKey[]
 }
+
+// These keys are backported locally without upgrading the entire backend contract package.
+const TEMPLATE_KEYS = [
+    ...CONTRACT_TEMPLATE_KEYS,
+    'LAST_TRAFFIC_RESET_AT',
+    'NEXT_TRAFFIC_RESET_AT_UNIX',
+    'NEXT_TRAFFIC_RESET_AT'
+] as const
 
 export const TemplateInfoPopoverShared = (props: IProps) => {
     const { templateKeys = TEMPLATE_KEYS } = props

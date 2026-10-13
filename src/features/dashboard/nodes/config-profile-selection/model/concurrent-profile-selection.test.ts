@@ -6,6 +6,7 @@ import {
     ConcurrentNodeSchema,
     ConcurrentUpdateNodeRequestBodySchema
 } from '../../../../../shared/api/types/concurrent-node.schema.ts'
+import { getChangedNodeValues } from './changed-node-values.ts'
 import {
     clearCoreProfileSelection,
     createConcurrentProfileBindingsFromNode,
@@ -25,6 +26,71 @@ const XRAY_PROFILE_UUID = '00000000-0000-4000-8000-000000000002'
 const SINGBOX_PROFILE_UUID = '00000000-0000-4000-8000-000000000003'
 const XRAY_INBOUND_UUID = '00000000-0000-4000-8000-000000000004'
 const SINGBOX_INBOUND_UUID = '00000000-0000-4000-8000-000000000005'
+
+test('display-only edits omit unchanged core bindings from the update request', () => {
+    const values = {
+        uuid: NODE_UUID,
+        name: 'new name',
+        configProfile: binding(XRAY_PROFILE_UUID, XRAY_INBOUND_UUID),
+        singBoxConfigProfile: binding(SINGBOX_PROFILE_UUID, SINGBOX_INBOUND_UUID)
+    }
+    assert.deepEqual(
+        getChangedNodeValues(NODE_UUID, values, (field) => field === 'name'),
+        {
+            uuid: NODE_UUID,
+            name: 'new name'
+        }
+    )
+})
+
+test('changing or clearing one core never sends the unchanged binding of the other', () => {
+    for (const field of ['configProfile', 'singBoxConfigProfile'] as const) {
+        for (const value of [binding(SINGBOX_PROFILE_UUID, SINGBOX_INBOUND_UUID), null]) {
+            const values = {
+                uuid: NODE_UUID,
+                configProfile: binding(XRAY_PROFILE_UUID, XRAY_INBOUND_UUID),
+                singBoxConfigProfile: binding(SINGBOX_PROFILE_UUID, SINGBOX_INBOUND_UUID),
+                [field]: value
+            }
+            const payload = getChangedNodeValues(NODE_UUID, values, (key) => key === field)
+            assert.deepEqual(ConcurrentUpdateNodeRequestBodySchema.parse(payload), {
+                uuid: NODE_UUID,
+                [field]: value
+            })
+        }
+    }
+})
+
+test('dirty false, zero, empty arrays and null survive while undefined is omitted', () => {
+    const payload = getChangedNodeValues(
+        NODE_UUID,
+        {
+            uuid: NODE_UUID,
+            isTrafficTrackingActive: false,
+            trafficLimitBytes: 0,
+            integrationUuids: [],
+            proxyUrl: null,
+            providerUuid: null,
+            configProfile: undefined
+        },
+        () => true
+    )
+    assert.deepEqual(payload, {
+        uuid: NODE_UUID,
+        isTrafficTrackingActive: false,
+        trafficLimitBytes: 0,
+        integrationUuids: [],
+        proxyUrl: null,
+        providerUuid: null
+    })
+})
+
+test('reverted fields are excluded and the fetched node identity is authoritative', () => {
+    assert.deepEqual(
+        getChangedNodeValues(NODE_UUID, { uuid: 'stale-id', name: 'original' }, () => false),
+        { uuid: NODE_UUID }
+    )
+})
 
 test('keeps an Xray-only selection', () => {
     const state = createConcurrentProfileSelection({

@@ -2,6 +2,8 @@
 
 Frontend for Remnawave Panel..
 
+Custom maintenance notes: [node edits and reset-date templates (2026-10-13)](docs/upstream-node-edit-reset-dates-20261013.md).
+
 Learn more about Remnawave Panel [here](https://docs.rw/).
 
 # Contributors
