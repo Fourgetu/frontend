@@ -179,6 +179,20 @@ export const useCreateUserRoute = createMutationHook({
     })
 })
 
+// Batch creation reports each result in the modal instead of displaying a toast
+// for every user. Refresh after failures too: a failed sync may leave a disabled route.
+export const useCreateUserRouteQuietly = createMutationHook({
+    endpoint: '/api/user-routes/',
+    requestMethod: 'post',
+    bodySchema: createRouteBodySchema,
+    responseSchema: routeResponseSchema,
+    rMutationParams: {
+        retry: false,
+        onSettled: (_data, _error, _variables, _context, queryClient) =>
+            void queryClient.invalidateQueries({ queryKey: userRoutesQueryKeys.getAll.queryKey })
+    }
+})
+
 export const useUpdateUserRoute = createMutationHook({
     endpoint: '/api/user-routes/',
     requestMethod: 'patch',

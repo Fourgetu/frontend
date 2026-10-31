@@ -42,7 +42,7 @@ const getApiErrorBody = (error: unknown): Record<string, unknown> | undefined =>
     return cause ?? responseBody
 }
 
-const resolveErrorMessageKey = (error: unknown): TranslationKey => {
+export const resolveErrorMessageKey = (error: unknown): TranslationKey => {
     const body = getApiErrorBody(error)
     const errorCode = body?.errorCode
     const message = typeof body?.message === 'string' ? body.message : ''

@@ -2149,6 +2149,22 @@
     "connections-current": "当前设置"
   },
   "speed-limits": {
+    "batch": {
+      "users": "用户（可多选）",
+      "users-description": "可选择多位用户；输入用户名搜索，每次最多显示 100 个匹配结果。",
+      "users-error": "用户加载失败，请重新搜索。",
+      "no-users": "没有匹配的用户",
+      "automatic-ports": "将为每位用户独立创建线路并自动分配端口，共用所选节点、入站、Host、限速策略和跳跃配置。",
+      "progress": "已处理 {{completed}} / {{total}} 位 · 成功 {{success}} · 失败 {{failed}}",
+      "progress-label": "线路创建进度",
+      "success": "已创建 · :{{port}}",
+      "failed": "创建失败",
+      "creating": "创建并验证中",
+      "pending": "等待创建",
+      "retry-hint": "已保留失败的用户，成功的用户不会重复提交。请根据错误提示处理后重试；若请求中断，请先检查线路列表，服务器可能已创建线路。",
+      "create": "为 {{count}} 位用户创建并验证",
+      "done": "完成"
+    },
     "title": "用户线路限速",
     "common": {
       "unlimited": "不限速",

@@ -2150,6 +2150,22 @@
     "connections-current": "Current"
   },
   "speed-limits": {
+    "batch": {
+      "users": "Users",
+      "users-description": "Select multiple users. Search by username; up to 100 matches are shown.",
+      "users-error": "Unable to load users. Try searching again.",
+      "no-users": "No matching users",
+      "automatic-ports": "Each selected user gets an independent route and an automatically allocated port. The node, inbound, Host, speed policy and hopping settings are shared.",
+      "progress": "{{completed}} / {{total}} processed · {{success}} succeeded · {{failed}} failed",
+      "progress-label": "Route creation progress",
+      "success": "Created · :{{port}}",
+      "failed": "Failed",
+      "creating": "Creating and verifying",
+      "pending": "Waiting",
+      "retry-hint": "Only failed users remain selected. Review the errors before retrying. If a request was interrupted, check the route list first: the server may have created the route.",
+      "create": "Create and verify for {{count}} users",
+      "done": "Done"
+    },
     "title": "User route speed limits",
     "common": {
       "unlimited": "Unlimited",

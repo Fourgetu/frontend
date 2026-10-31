@@ -1,6 +1,6 @@
 import { EditUserRouteModal } from '@features/dashboard/speed-limits/components/edit-user-route-modal'
+import { RouteUserSelect } from '@features/dashboard/speed-limits/components/route-user-select'
 import {
-    buildCreateUserRoutePayload,
     bytesPerSecondToMbps,
     getGostForwardNetwork,
     isHostCompatibleWithUserRoute,
@@ -12,15 +12,24 @@ import {
     mbpsToBytesPerSecond
 } from '@features/dashboard/speed-limits/model/speed-limit'
 import {
+    createUserRoutesSequentially,
+    getFailedRouteUserIds,
+    type RouteBatchResult,
+    type RouteBatchUser
+} from '@features/dashboard/speed-limits/model/user-route-batch'
+import {
     ActionIcon,
     Alert,
     Badge,
     Button,
     Card,
     Checkbox,
+    Fieldset,
     Group,
     Modal,
     NumberInput,
+    Progress,
+    ScrollArea,
     Select,
     SimpleGrid,
     Stack,
@@ -32,7 +41,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TbGauge, TbPlugConnected, TbRefresh, TbTrash } from 'react-icons/tb'
 
@@ -42,7 +51,7 @@ import {
     UserRoute,
     useCreatePortHoppingConfig,
     useCreateSpeedLimit,
-    useCreateUserRoute,
+    useCreateUserRouteQuietly,
     useDeletePortHoppingConfig,
     useDeleteSpeedLimit,
     useDeleteUserRoute,
@@ -59,6 +68,7 @@ import {
     useUpdateSpeedLimit,
     useUpdateUserRoute
 } from '@shared/api/hooks'
+import { resolveErrorMessageKey } from '@shared/api/hooks/user-routes/user-route-mutation-feedback'
 import { LoadingScreen, Page, PageHeaderShared } from '@shared/ui'
 
 const formatRate = (value: number, unlimitedLabel: string) =>
@@ -118,7 +128,7 @@ export function SpeedLimitsPage() {
     const createSpeed = useCreateSpeedLimit()
     const updateSpeed = useUpdateSpeedLimit()
     const deleteSpeed = useDeleteSpeedLimit()
-    const createRoute = useCreateUserRoute()
+    const createRoute = useCreateUserRouteQuietly()
     const updateRoute = useUpdateUserRoute()
     const deleteRoute = useDeleteUserRoute()
     const reallocatePort = useReallocateUserRoutePort()
@@ -136,7 +146,10 @@ export function SpeedLimitsPage() {
     const [uploadMbps, setUploadMbps] = useState(20)
     const [speedEnabled, setSpeedEnabled] = useState(true)
 
-    const [userId, setUserId] = useState<string | null>(null)
+    const [routeUsers, setRouteUsers] = useState<RouteBatchUser[]>([])
+    const [routeResults, setRouteResults] = useState<RouteBatchResult[]>([])
+    const [creatingRoutes, setCreatingRoutes] = useState(false)
+    const creatingRoutesRef = useRef(false)
     const [nodeUuid, setNodeUuid] = useState<string | null>(null)
     const [inboundUuid, setInboundUuid] = useState<string | null>(null)
     const [hostUuid, setHostUuid] = useState<string | null>(null)
@@ -225,14 +238,14 @@ export function SpeedLimitsPage() {
         usePublicCompatibility
     )
     const routeFormReady = isUserRouteFormReady({
-        userId,
+        userId: routeUsers[0]?.value ?? null,
         nodeUuid,
         inboundUuid,
         hostUuid,
         selectedInbound,
         selectedHost,
         internalAddress,
-        externalPort,
+        externalPort: routeUsers.length > 1 ? '' : externalPort,
         portHoppingConfigUuid,
         safetyConfirmed,
         coreType: selectedInbound?.coreType,
@@ -353,7 +366,8 @@ export function SpeedLimitsPage() {
     }
 
     const resetRouteForm = () => {
-        setUserId(null)
+        setRouteUsers([])
+        setRouteResults([])
         setNodeUuid(null)
         setInboundUuid(null)
         setHostUuid(null)
@@ -365,7 +379,8 @@ export function SpeedLimitsPage() {
         setAllowPublicInbound(false)
     }
 
-    const saveRoute = () => {
+    const saveRoute = async () => {
+        if (creatingRoutesRef.current) return
         if (!gostTargetAddress || !safetyConfirmed) {
             notifications.show({
                 color: 'red',
@@ -376,7 +391,7 @@ export function SpeedLimitsPage() {
         }
         if (
             !routeFormReady ||
-            !userId ||
+            routeUsers.length === 0 ||
             !nodeUuid ||
             !inboundUuid ||
             !hostUuid ||
@@ -385,28 +400,36 @@ export function SpeedLimitsPage() {
             return
         }
 
-        createRoute.mutate({
-            variables: buildCreateUserRoutePayload({
-                userId,
-                nodeUuid,
-                inboundUuid,
-                hostUuid,
-                speedLimitUuid,
-                portHoppingConfigUuid,
-                externalPort,
-                allowPublicInbound: usePublicCompatibility,
-                internalAddress: gostTargetAddress,
-                internalPort: selectedInbound.port,
-                network
-            }),
-            mutationFns: {
-                onSuccess: () => {
-                    routeModal.close()
-                    resetRouteForm()
-                }
-            }
-        })
+        creatingRoutesRef.current = true
+        setCreatingRoutes(true)
+        try {
+            const results = await createUserRoutesSequentially({
+                users: routeUsers,
+                input: {
+                    nodeUuid,
+                    inboundUuid,
+                    hostUuid,
+                    speedLimitUuid,
+                    portHoppingConfigUuid,
+                    externalPort,
+                    allowPublicInbound: usePublicCompatibility,
+                    internalAddress: gostTargetAddress,
+                    internalPort: selectedInbound.port,
+                    network
+                },
+                create: (variables) => createRoute.mutateAsync({ variables }),
+                onProgress: setRouteResults
+            })
+            const failedIds = new Set(getFailedRouteUserIds(results))
+            setRouteUsers((users) => users.filter((user) => failedIds.has(user.value)))
+        } finally {
+            creatingRoutesRef.current = false
+            setCreatingRoutes(false)
+        }
     }
+
+    const routeSuccessCount = routeResults.filter((result) => result.status === 'success').length
+    const routeFailureCount = routeResults.filter((result) => result.status === 'failed').length
 
     if (speedsLoading || routesLoading || hoppingLoading) return <LoadingScreen />
 
@@ -514,7 +537,13 @@ export function SpeedLimitsPage() {
                                 {t('speed-limits.routes.description')}
                             </Text>
                         </div>
-                        <Button leftSection={<TbPlugConnected />} onClick={routeModal.open}>
+                        <Button
+                            leftSection={<TbPlugConnected />}
+                            onClick={() => {
+                                resetRouteForm()
+                                routeModal.open()
+                            }}
+                        >
                             {t('speed-limits.routes.new')}
                         </Button>
                     </Group>
@@ -798,146 +827,241 @@ export function SpeedLimitsPage() {
             </Modal>
 
             <Modal
-                onClose={routeModal.close}
+                closeOnClickOutside={!creatingRoutes}
+                closeOnEscape={!creatingRoutes}
+                onClose={() => {
+                    if (!creatingRoutesRef.current) routeModal.close()
+                }}
                 opened={routeModalOpened}
                 size="lg"
                 title={t('speed-limits.routes.create')}
+                withCloseButton={!creatingRoutes}
             >
                 <Stack>
-                    <Select
-                        data={
-                            usersData?.users.map((user) => ({
-                                label: `${user.username} (#${user.id})`,
-                                value: String(user.id)
-                            })) ?? []
-                        }
-                        label={t('speed-limits.fields.user')}
-                        onChange={setUserId}
-                        required
-                        searchable
-                        value={userId}
-                    />
-                    <Select
-                        data={nodes?.map((node) => ({ label: node.name, value: node.uuid })) ?? []}
-                        label={t('speed-limits.fields.node')}
-                        onChange={(value) => {
-                            setNodeUuid(value)
-                            setInboundUuid(null)
-                            setHostUuid(null)
-                            setPortHoppingConfigUuid(null)
-                            setAllowPublicInbound(false)
-                            setSafetyConfirmed(false)
-                        }}
-                        required
-                        searchable
-                        value={nodeUuid}
-                    />
-                    <Select
-                        data={inboundOptions}
-                        label={t('speed-limits.fields.proxy-core-inbound')}
-                        onChange={(value) => {
-                            setInboundUuid(value)
-                            setHostUuid(null)
-                            setPortHoppingConfigUuid(null)
-                            setAllowPublicInbound(false)
-                            setSafetyConfirmed(false)
-                            const inbound = selectedNodeInbounds.find((item) => item.uuid === value)
-                            setNetwork(getGostForwardNetwork(inbound?.type ?? '', inbound?.network))
-                        }}
-                        required
-                        value={inboundUuid}
-                    />
-                    {selectedInbound && !inboundIsLoopback && !publicCompatibilityAvailable && (
-                        <Alert color="red">{t('speed-limits.routes.public-inbound-warning')}</Alert>
-                    )}
-                    {publicCompatibilityAvailable && (
-                        <Stack gap="xs">
-                            <Switch
-                                checked={allowPublicInbound}
-                                label={t('speed-limits.routes.public-compatibility')}
-                                onChange={(event) => {
-                                    setAllowPublicInbound(event.currentTarget.checked)
+                    <Fieldset disabled={creatingRoutes} variant="unstyled">
+                        <Stack>
+                            <RouteUserSelect
+                                disabled={creatingRoutes}
+                                onChange={(users) => {
+                                    setRouteUsers(users)
+                                    if (users.length > 1) setExternalPort('')
+                                }}
+                                value={routeUsers}
+                            />
+                            {routeUsers.length > 1 && (
+                                <Alert color="blue">
+                                    {t('speed-limits.batch.automatic-ports')}
+                                </Alert>
+                            )}
+                            <Select
+                                data={
+                                    nodes?.map((node) => ({
+                                        label: node.name,
+                                        value: node.uuid
+                                    })) ?? []
+                                }
+                                label={t('speed-limits.fields.node')}
+                                onChange={(value) => {
+                                    setNodeUuid(value)
+                                    setInboundUuid(null)
+                                    setHostUuid(null)
+                                    setPortHoppingConfigUuid(null)
+                                    setAllowPublicInbound(false)
                                     setSafetyConfirmed(false)
                                 }}
+                                required
+                                searchable
+                                value={nodeUuid}
                             />
-                            <Alert color="yellow">
-                                {t('speed-limits.routes.public-compatibility-warning')}
-                            </Alert>
+                            <Select
+                                data={inboundOptions}
+                                label={t('speed-limits.fields.proxy-core-inbound')}
+                                onChange={(value) => {
+                                    setInboundUuid(value)
+                                    setHostUuid(null)
+                                    setPortHoppingConfigUuid(null)
+                                    setAllowPublicInbound(false)
+                                    setSafetyConfirmed(false)
+                                    const inbound = selectedNodeInbounds.find(
+                                        (item) => item.uuid === value
+                                    )
+                                    setNetwork(
+                                        getGostForwardNetwork(inbound?.type ?? '', inbound?.network)
+                                    )
+                                }}
+                                required
+                                value={inboundUuid}
+                            />
+                            {selectedInbound &&
+                                !inboundIsLoopback &&
+                                !publicCompatibilityAvailable && (
+                                    <Alert color="red">
+                                        {t('speed-limits.routes.public-inbound-warning')}
+                                    </Alert>
+                                )}
+                            {publicCompatibilityAvailable && (
+                                <Stack gap="xs">
+                                    <Switch
+                                        checked={allowPublicInbound}
+                                        label={t('speed-limits.routes.public-compatibility')}
+                                        onChange={(event) => {
+                                            setAllowPublicInbound(event.currentTarget.checked)
+                                            setSafetyConfirmed(false)
+                                        }}
+                                    />
+                                    <Alert color="yellow">
+                                        {t('speed-limits.routes.public-compatibility-warning')}
+                                    </Alert>
+                                </Stack>
+                            )}
+                            <Select
+                                data={hostOptions}
+                                disabled={!inboundUuid}
+                                label={t('speed-limits.fields.host')}
+                                onChange={setHostUuid}
+                                required
+                                searchable
+                                value={hostUuid}
+                            />
+                            <Select
+                                clearable
+                                data={
+                                    speedLimits?.map((speed) => ({
+                                        label: speed.name,
+                                        value: speed.uuid
+                                    })) ?? []
+                                }
+                                label={t('speed-limits.fields.speed-policy')}
+                                onChange={setSpeedLimitUuid}
+                                placeholder={t('speed-limits.common.unlimited')}
+                                value={speedLimitUuid}
+                            />
+                            <Select
+                                clearable
+                                data={routeHoppingOptions}
+                                description={
+                                    routeHoppingOptions.length > 0
+                                        ? t('speed-limits.routes.hopping-available-description')
+                                        : t('speed-limits.routes.hopping-unavailable-description')
+                                }
+                                disabled={routeHoppingOptions.length === 0}
+                                label={t('speed-limits.hopping.title')}
+                                onChange={setPortHoppingConfigUuid}
+                                placeholder={t('speed-limits.routes.canonical-port-only')}
+                                value={portHoppingConfigUuid}
+                            />
+                            <SimpleGrid cols={2}>
+                                <Select
+                                    data={[
+                                        { label: 'TCP', value: 'tcp' },
+                                        { label: 'UDP', value: 'udp' },
+                                        { label: 'TCP + UDP', value: 'tcp,udp' }
+                                    ]}
+                                    description={t('speed-limits.routes.network-derived')}
+                                    disabled
+                                    label={t('speed-limits.fields.forward-network')}
+                                    value={network}
+                                />
+                                <NumberInput
+                                    disabled={routeUsers.length > 1}
+                                    label={t('speed-limits.fields.external-port')}
+                                    max={65535}
+                                    min={1}
+                                    onChange={setExternalPort}
+                                    placeholder={t('speed-limits.routes.automatic-port')}
+                                    value={externalPort}
+                                />
+                            </SimpleGrid>
+                            <Checkbox
+                                checked={safetyConfirmed}
+                                label={t(
+                                    usePublicCompatibility
+                                        ? 'speed-limits.routes.public-compatibility-confirmation'
+                                        : 'speed-limits.routes.safety-confirmation'
+                                )}
+                                onChange={(event) =>
+                                    setSafetyConfirmed(event.currentTarget.checked)
+                                }
+                            />
+                        </Stack>
+                    </Fieldset>
+                    {routeResults.length > 0 && (
+                        <Stack gap="xs" aria-live="polite" role="status">
+                            <Text fw={600} size="sm">
+                                {t('speed-limits.batch.progress', {
+                                    completed: routeSuccessCount + routeFailureCount,
+                                    total: routeResults.length,
+                                    success: routeSuccessCount,
+                                    failed: routeFailureCount
+                                })}
+                            </Text>
+                            <Progress
+                                aria-label={t('speed-limits.batch.progress-label')}
+                                value={
+                                    ((routeSuccessCount + routeFailureCount) /
+                                        routeResults.length) *
+                                    100
+                                }
+                            />
+                            <ScrollArea.Autosize mah={240}>
+                                <Stack gap="xs">
+                                    {routeResults.map((result) => (
+                                        <div key={result.value}>
+                                            <Group gap="xs" justify="space-between">
+                                                <Text
+                                                    size="sm"
+                                                    style={{ overflowWrap: 'anywhere' }}
+                                                >
+                                                    {result.label}
+                                                </Text>
+                                                <Badge
+                                                    color={
+                                                        result.status === 'success'
+                                                            ? 'teal'
+                                                            : result.status === 'failed'
+                                                              ? 'red'
+                                                              : 'gray'
+                                                    }
+                                                >
+                                                    {result.status === 'success'
+                                                        ? t('speed-limits.batch.success', {
+                                                              port: result.externalPort
+                                                          })
+                                                        : result.status === 'failed'
+                                                          ? t('speed-limits.batch.failed')
+                                                          : result.status === 'creating'
+                                                            ? t('speed-limits.batch.creating')
+                                                            : t('speed-limits.batch.pending')}
+                                                </Badge>
+                                            </Group>
+                                            {result.status === 'failed' && (
+                                                <Text c="red" size="xs">
+                                                    {t(resolveErrorMessageKey(result.error))}
+                                                </Text>
+                                            )}
+                                        </div>
+                                    ))}
+                                </Stack>
+                            </ScrollArea.Autosize>
+                            {!creatingRoutes && routeFailureCount > 0 && (
+                                <Alert color="orange">{t('speed-limits.batch.retry-hint')}</Alert>
+                            )}
                         </Stack>
                     )}
-                    <Select
-                        data={hostOptions}
-                        disabled={!inboundUuid}
-                        label={t('speed-limits.fields.host')}
-                        onChange={setHostUuid}
-                        required
-                        searchable
-                        value={hostUuid}
-                    />
-                    <Select
-                        clearable
-                        data={
-                            speedLimits?.map((speed) => ({
-                                label: speed.name,
-                                value: speed.uuid
-                            })) ?? []
-                        }
-                        label={t('speed-limits.fields.speed-policy')}
-                        onChange={setSpeedLimitUuid}
-                        placeholder={t('speed-limits.common.unlimited')}
-                        value={speedLimitUuid}
-                    />
-                    <Select
-                        clearable
-                        data={routeHoppingOptions}
-                        description={
-                            routeHoppingOptions.length > 0
-                                ? t('speed-limits.routes.hopping-available-description')
-                                : t('speed-limits.routes.hopping-unavailable-description')
-                        }
-                        disabled={routeHoppingOptions.length === 0}
-                        label={t('speed-limits.hopping.title')}
-                        onChange={setPortHoppingConfigUuid}
-                        placeholder={t('speed-limits.routes.canonical-port-only')}
-                        value={portHoppingConfigUuid}
-                    />
-                    <SimpleGrid cols={2}>
-                        <Select
-                            data={[
-                                { label: 'TCP', value: 'tcp' },
-                                { label: 'UDP', value: 'udp' },
-                                { label: 'TCP + UDP', value: 'tcp,udp' }
-                            ]}
-                            description={t('speed-limits.routes.network-derived')}
-                            disabled
-                            label={t('speed-limits.fields.forward-network')}
-                            value={network}
-                        />
-                        <NumberInput
-                            label={t('speed-limits.fields.external-port')}
-                            max={65535}
-                            min={1}
-                            onChange={setExternalPort}
-                            placeholder={t('speed-limits.routes.automatic-port')}
-                            value={externalPort}
-                        />
-                    </SimpleGrid>
-                    <Checkbox
-                        checked={safetyConfirmed}
-                        label={t(
-                            usePublicCompatibility
-                                ? 'speed-limits.routes.public-compatibility-confirmation'
-                                : 'speed-limits.routes.safety-confirmation'
-                        )}
-                        onChange={(event) => setSafetyConfirmed(event.currentTarget.checked)}
-                    />
                     <Button
-                        disabled={!routeFormReady || createRoute.isPending}
-                        loading={createRoute.isPending}
+                        disabled={!routeFormReady || creatingRoutes}
+                        loading={creatingRoutes}
                         onClick={saveRoute}
                     >
-                        {t('speed-limits.routes.create-and-verify')}
+                        {routeUsers.length > 1
+                            ? t('speed-limits.batch.create', { count: routeUsers.length })
+                            : t('speed-limits.routes.create-and-verify')}
                     </Button>
+                    {routeResults.length > 0 && !creatingRoutes && (
+                        <Button onClick={routeModal.close} variant="default">
+                            {t('speed-limits.batch.done')}
+                        </Button>
+                    )}
                 </Stack>
             </Modal>
 
